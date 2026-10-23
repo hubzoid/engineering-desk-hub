@@ -26,6 +26,9 @@ conventions in your own files under `knowledge/` or in rules, not in
 `AGENTS.md`. If you do change a file of the repo's, `git pull` merges it or
 shows the conflict for you (or your coding agent) to resolve.
 
+If `git pull` says your local changes would be overwritten, commit them first
+(`git commit -am "Our settings"`) and pull again, so Git merges both.
+
 ## From the GitZoid bundled with Hubzoid (1.3.1 to 2.0.1)
 
 Hubs made with `hubzoid init <name> --template gitzoid` keep working with

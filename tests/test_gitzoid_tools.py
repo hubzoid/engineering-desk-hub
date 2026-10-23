@@ -122,3 +122,16 @@ def test_the_repo_is_a_complete_hub():
     assert {".env", ".hubzoid/", ".venv/"} <= set(ignored) and "restricted/" not in ignored
     assert "hubzoid>=2.0.2,<3" in (root / "requirements.txt").read_text()
     assert "HUBZOID_SCHEDULES=1" in (root / ".env.example").read_text()
+
+
+SHIPPED_SETTINGS_SHA256 = "6366592556008358bfaf27fa8fee98718bd6718ead4118a40b53f4d53efe37fe"
+
+
+def test_the_shipped_settings_file_never_changes():
+    """workflows/settings.yaml is the user's after they clone: UPGRADING.md
+    promises that updates never change it, so git pull never conflicts there.
+    New options get a default in code and a line in CHANGELOG.md instead."""
+    import hashlib
+
+    digest = hashlib.sha256((h.TEMPLATE / "workflows" / "settings.yaml").read_bytes()).hexdigest()
+    assert digest == SHIPPED_SETTINGS_SHA256, "workflows/settings.yaml belongs to users: leave it as released"
