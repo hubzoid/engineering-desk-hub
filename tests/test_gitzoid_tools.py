@@ -47,7 +47,10 @@ def test_tool_files_and_schemas(hub):
 
 
 def test_status_and_pr_details_for_the_fix_loop(hub):
-    status = json.loads(call(hub, "gitzoid_status"))[0]
+    whole = json.loads(call(hub, "gitzoid_status"))
+    assert whole["source"] == "fictional sample repo" and whole["publishing"].startswith("preview")
+    status = whole["repos"][0]
+    assert status["on"] == {"reviews": True, "security": True, "reports": True}
     blocking = {p["number"]: p["blocking_findings"] for p in status["pull_requests"]}
     assert blocking[102] == 1 and blocking[104] == 0
     details = json.loads(call(hub, "pr_details", repo="storefront", number=102))
@@ -102,7 +105,7 @@ def test_people_activity_is_gated(hub):
 
 
 def test_tools_answer_signed_in_people_in_chat_and_mcp_only(hub):
-    assert json.loads(call(hub, "gitzoid_status", surface="mcp"))[0]["pull_requests"]  # Claude Code or Codex
+    assert json.loads(call(hub, "gitzoid_status", surface="mcp"))["repos"][0]["pull_requests"]  # Claude Code or Codex
     assert call(hub, "gitzoid_status", surface="slack").startswith("[access denied")
     assert call(hub, "gitzoid_status", who="stranger@example.com").startswith("[access denied")
     tool, _ = h.restricted(hub)["gitzoid_status"]  # even without the guard, nobody gets nothing

@@ -1,5 +1,5 @@
 """GitZoid's chat and MCP tools for people allowed to use them (the `gitzoid`
-capability, granted per agent in the Console). They read GitZoid's own data
+capability, granted per agent in Settings, Agents, Access). They read GitZoid's own data
 and GitHub, never the hub's files. Hubzoid refuses restricted tools on Slack
 and Telegram, so these answer in web chat and over MCP
 from Claude Code or Codex.
@@ -70,6 +70,7 @@ def gitzoid_status(repo: str = "") -> str:
         prof = store.profile(name)
         out.append({
             "repo": name,
+            "on": settings.switches(name),
             "pull_requests": [{"number": r["number"], "title": r["title"], "author": r["author"],
                                "state": r["state"], "verdict": r["verdict"], "blocking_findings": blocking.get(r["number"], 0),
                                "paused": bool(r["paused"]), "note": r.get("note") or r.get("pause_reason"),
@@ -79,7 +80,11 @@ def gitzoid_status(repo: str = "") -> str:
             "checks_not_running": [f"{c['check_name']}: {c['last_error']}" for c in problems],
             "profile": "missing" if not prof else ("stale: " + (prof["stale_reason"] or "") if prof["stale"] else "fresh"),
         })
-    return json.dumps(out, indent=1)
+    return json.dumps({"source": "fictional sample repo" if settings.source == "sample" else "GitHub",
+                       "publishing": gz.settings.publishing(settings) + (": nothing is written to GitHub"
+                                                                       if gz.settings.publishing(settings) == "preview" else ""),
+                       "repos": out or "GitZoid is not watching any repo yet. Add repos in workflows/settings.yaml."},
+                      indent=1)
 
 
 @function_tool(strict_mode=False)

@@ -4,6 +4,11 @@ Workflows pass `hub.setting("gitzoid")`; the chat tools read the file. Every
 key is optional and the defaults below are what an empty block means. A wrong
 value fails with a message that names the key, so a typo never silently turns
 a check off.
+
+`version: 2` (what this repo ships): nothing runs on its own until a repo
+switches it on. Each repo turns on `reviews`, `security` and `reports` itself.
+A file with no version is a hub made from the template bundled with Hubzoid
+1.3 to 2.0.1: every listed repo keeps everything on, as it had then.
 """
 from __future__ import annotations
 
@@ -33,6 +38,9 @@ class RepoSettings(_Strict):
     commands: bool | None = None
     status_check: StatusCheck | None = None
     exclude_paths: list[str] = []   # added to security.exclude_paths for this repo
+    reviews: bool = False           # pull request reviews, follow-ups and @gitzoid commands
+    security: bool = False          # dependency watch and deep audit, with alerts
+    reports: bool = False           # weekly digest and the monthly code and delivery reports
 
     @field_validator("name")
     @classmethod
@@ -116,7 +124,13 @@ class Analyzer(_Strict):
     allow_project_code: bool = False
 
 
+class Email(_Strict):
+    security: str | None = None     # the email list for security alerts; none: alerts stay on their page
+    reports: str | None = None      # the email list for the digest and monthly reports
+
+
 class Settings(_Strict):
+    version: Literal[1, 2] = 1
     source: Literal["sample", "github"] = "sample"
     trigger: Literal["poll", "webhook"] = "poll"
     commands: bool = True
@@ -125,6 +139,7 @@ class Settings(_Strict):
     security_groups: dict[str, SecurityGroup] = {}
     digest_groups: dict[str, DigestGroup] = {}
     owner_list: str | None = None
+    email: Email = Email()
     review: ReviewSettings = ReviewSettings()
     security: SecuritySettings = SecuritySettings()
     audit: AuditSettings = AuditSettings()
@@ -137,6 +152,12 @@ class Settings(_Strict):
     @classmethod
     def _names_or_dicts(cls, v):
         return [{"name": r} if isinstance(r, str) else r for r in (v or [])]
+
+    @model_validator(mode="after")
+    def _sample_repo(self):
+        if self.source == "sample" and not self.repos:
+            self.repos = [RepoSettings(name=SAMPLE_REPO, reviews=True, security=True, reports=True)]
+        return self
 
     @model_validator(mode="after")
     def _groups_name_known_repos(self):
@@ -159,7 +180,45 @@ class Settings(_Strict):
         return self
 
     def repo_names(self) -> list[str]:
+        """Every repo GitZoid knows: chat tools and profiles cover them all."""
         return [r.name for r in self.repos]
+
+    @property
+    def legacy(self) -> bool:
+        """A version 1 file: everything stays on for every repo, as before."""
+        return self.version == 1
+
+    def _switched(self, switch: str) -> list[str]:
+        return [r.name for r in self.repos if self.legacy or getattr(r, switch)]
+
+    def review_repos(self) -> list[str]:
+        return self._switched("reviews")
+
+    def security_repos(self) -> list[str]:
+        return self._switched("security")
+
+    def report_repos(self) -> list[str]:
+        return self._switched("reports")
+
+    def switches(self, name: str) -> dict[str, bool]:
+        r = self.repo(name)
+        return {s: self.legacy or getattr(r, s) for s in ("reviews", "security", "reports")}
+
+    def report_groups(self) -> dict[str, DigestGroup]:
+        """Digest groups limited to repos with reports on. With no groups (or a
+        version 2 file with groups left out), one group, `all`, of every repo
+        with reports on, emailed to `email.reports`."""
+        repos = set(self.report_repos())
+        groups = {g: grp.model_copy(update={"repos": [r for r in grp.repos if r in repos]})
+                  for g, grp in self.digest_groups.items()}
+        groups = {g: grp for g, grp in groups.items() if grp.repos}
+        if groups or self.digest_groups:
+            return groups
+        if not repos or self.legacy:
+            return {}
+        return {"all": DigestGroup(repos=[r for r in self.repo_names() if r in repos],
+                                   email_list=self.email.reports or self.owner_list,
+                                   monthly_reports=["code", "delivery"])}
 
     def repo(self, name: str) -> RepoSettings:
         for r in self.repos:
@@ -188,16 +247,30 @@ class Settings(_Strict):
         return next((g for g, grp in self.security_groups.items() if name in grp.repos), None)
 
     def security_scope(self) -> dict[str, SecurityGroup]:
-        """Every repo is watched: repos in no group alert to owner_list."""
-        groups = dict(self.security_groups)
-        rest = [r for r in self.repo_names() if self.security_group_of(r) is None]
+        """Repos with security on. Repos in no group alert to `email.security`
+        (or the older owner_list)."""
+        repos = set(self.security_repos())
+        groups = {g: grp.model_copy(update={"repos": [r for r in grp.repos if r in repos]})
+                  for g, grp in self.security_groups.items()}
+        groups = {g: grp for g, grp in groups.items() if grp.repos}
+        rest = [r for r in self.repo_names() if r in repos and self.security_group_of(r) is None]
         if rest:
-            groups["unassigned"] = SecurityGroup(repos=rest, email_list=self.owner_list)
+            groups["unassigned"] = SecurityGroup(repos=rest, email_list=self.email.security or self.owner_list)
         return groups
 
 
 class SettingsError(ValueError):
     pass
+
+
+def publishing(settings: "Settings") -> str:
+    """What GitZoid writes to GitHub: the sample never writes anything."""
+    return "live" if settings.source == "github" and settings.review.post_to_github else "preview"
+
+
+def nothing_on(settings: "Settings", switch: str) -> str:
+    return (f"No repo has {switch} on. Turn it on per repo in workflows/settings.yaml "
+            f"(`{switch}: true` under the repo).")
 
 
 def load(raw: dict | None) -> Settings:

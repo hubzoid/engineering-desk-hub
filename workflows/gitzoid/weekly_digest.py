@@ -49,8 +49,11 @@ def extras(repos: list[str], since_30d: str, start: str) -> dict:
 @workflow(schedule="every monday at 08:00", catch_up=True)
 def weekly_digest():
     settings = gz.settings.load(hub.setting("gitzoid"))
-    groups = {g: (grp.repos, grp.email_list) for g, grp in settings.digest_groups.items()} or \
-        {"all": (settings.repo_names(), settings.owner_list)}
+    groups = {g: (grp.repos, grp.email_list) for g, grp in settings.report_groups().items()}
+    if not groups and settings.legacy:
+        groups = {"all": (settings.repo_names(), settings.owner_list)}
+    if not groups:
+        return {"skipped": gz.settings.nothing_on(settings, "reports")}
     now = gz.github.ts(reports.clock())
     end = now.replace(hour=0, minute=0, second=0, microsecond=0)
     start = end - timedelta(days=settings.digest.days)

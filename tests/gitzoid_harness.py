@@ -23,7 +23,10 @@ import yaml
 
 import hubzoid
 
-TEMPLATE = Path(hubzoid.__file__).resolve().parent / "templates" / "gitzoid"
+TEMPLATE = Path(__file__).resolve().parents[1]   # this repo: the hub folder
+# What a hub needs to run, copied into each test hub (not .git, .venv or tests).
+RUNTIME = ("AGENTS.md", "identity", "knowledge", "restricted", "workflows", "evals", "raw_data", "connectors")
+SAMPLE_SETTINGS = Path(__file__).resolve().parent / "fixtures" / "sample-settings.yaml"
 BOT = "gitzoid@example.com"            # the automation account team runs act as
 PERSON = "maya@example.com"            # who asks, in Run for me and the tools
 PEOPLE = (BOT, PERSON, "ana@example.com", "boss@example.com")
@@ -47,9 +50,16 @@ def make_hub(tmp: Path, name: str = "gitzoid-hub") -> Path:
     from hubzoid.access import store_for
 
     hub_dir = Path(tmp) / name
-    shutil.copytree(TEMPLATE, hub_dir, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".hubzoid"))
+    hub_dir.mkdir(parents=True)
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".hubzoid")
+    for part in RUNTIME:
+        src = TEMPLATE / part
+        if src.is_dir():
+            shutil.copytree(src, hub_dir / part, ignore=ignore)
+        else:
+            shutil.copy2(src, hub_dir / part)
     settings_path = hub_dir / "workflows" / "settings.yaml"
-    settings = yaml.safe_load(settings_path.read_text())
+    settings = yaml.safe_load(SAMPLE_SETTINGS.read_text())
     for list_name in settings.get("email_lists", {}):
         settings["email_lists"][list_name] = ["owner@example.com"]
     settings_path.write_text(yaml.safe_dump(settings, sort_keys=False))
@@ -70,7 +80,7 @@ def grant(hub_dir: Path, email: str, *permissions: str) -> None:
 
 
 def set_attrs(hub_dir: Path, email: str, **attrs) -> None:
-    """Access attributes, as an admin sets them in the Console (always text)."""
+    """Access attributes, as an admin sets them in Settings (always text)."""
     from hubzoid.access import store_for
 
     for k, v in attrs.items():

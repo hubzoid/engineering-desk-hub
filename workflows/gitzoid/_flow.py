@@ -101,7 +101,7 @@ def repaired(exc: BaseException, response_model):
 def account_lost(exc: BaseException) -> bool:
     """The account the run acts as was blocked, replaced or lost this agent
     while it ran. Every later model call would fail the same way, so the run
-    stops (and shows as failed in the Console) rather than marking each pull
+    stops (and shows as failed in Runs & schedules) rather than marking each pull
     request failed."""
     from hubzoid.workflows.identity import IdentityError
     return isinstance(exc, IdentityError)

@@ -1,5 +1,5 @@
 """Code, delivery and people reports. Each is a workflow with these inputs, so
-the same report runs from chat, MCP, the Console or the CLI, on a person's
+the same report runs from chat, MCP, the web app or the CLI, on a person's
 own schedule, or monthly for the team."""
 from __future__ import annotations
 
@@ -68,9 +68,10 @@ def scope(req: ReportRequest, settings) -> tuple[str, list[str]]:
     """The report's name and repos, limited to this agent's repos."""
     names = settings.repo_names()
     if req.group:
-        if req.group not in settings.digest_groups:
-            raise ValueError(f"no digest group {req.group!r}; groups: {', '.join(settings.digest_groups) or 'none'}")
-        return req.group, list(settings.digest_groups[req.group].repos)
+        groups = all_groups(settings)
+        if req.group not in groups:
+            raise ValueError(f"no digest group {req.group!r}; groups: {', '.join(groups) or 'none'}")
+        return req.group, list(groups[req.group].repos)
     if req.repos:
         unknown = [r for r in req.repos if r not in names]
         if unknown:
@@ -84,8 +85,15 @@ def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:40] or "all"
 
 
+def all_groups(settings) -> dict:
+    """Named digest groups, each limited to its repos with reports on when it
+    has any, plus `all` when reports are on and no groups are named."""
+    return {**settings.digest_groups, **settings.report_groups()}
+
+
 def monthly_groups(settings, kind: str) -> list[str]:
-    return [g for g, grp in settings.digest_groups.items() if kind in grp.monthly_reports]
+    """The groups a scheduled report covers: only repos with reports on."""
+    return [g for g, grp in settings.report_groups().items() if kind in grp.monthly_reports]
 
 
 def manager_groups(attrs: dict, settings) -> list[str]:

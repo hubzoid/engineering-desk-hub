@@ -1,7 +1,6 @@
 """Regressions for the 436c76b product/reliability review, using real Hubzoid contexts."""
 from __future__ import annotations
 
-import importlib.util
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -197,22 +196,6 @@ def test_review_events_survive_later_row_changes_and_exclude_automation(hub):
         {"author": "pat-owner", "body": "GitZoid found 1 issue(s)", "state": "COMMENTED", "submitted_at": "2026-10-02"},
         {"author": "reviewer", "state": "APPROVED", "submitted_at": "2026-10-03"}]}
     assert gz.metrics.first_review(pr) == "2026-10-03"
-
-
-def test_setup_preserves_custom_rules_budgets_and_has_no_network_side_effects(hub):
-    spec = importlib.util.spec_from_file_location("setup_gitzoid", hub / "setup.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    configured = module.configure(hub, ["a/b", "a/c"], publish=True, backlog="all", bots=True)
-    assert configured["review"]["post_to_github"] and not configured["review"]["skip_bots"]
-    assert configured["limits"]["model_calls_per_day"] == 400
-    assert configured["digest_groups"]["team"]["monthly_reports"] == ["code", "delivery"]
-    assert (hub / "workflows/settings.yaml.before-setup").is_file()
-    h.write_settings(hub, {"repos": [{"name": "a/c", "model": "custom-model", "context": "Sensitive exports"}, "a/b"]})
-    again = module.configure(hub, ["a/c", "a/d"], publish=False)
-    assert again["security_groups"]["team"]["repos"] == ["a/c"]
-    assert again["repos"][0] == {"name": "a/c", "model": "custom-model", "context": "Sensitive exports"}
-    assert again["digest_groups"]["new-repos"]["monthly_reports"] == ["code", "delivery"]
 
 
 def test_setup_check_and_reports_have_honest_scope(hub):

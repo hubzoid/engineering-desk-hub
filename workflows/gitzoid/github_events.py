@@ -79,6 +79,8 @@ def github_events():
     if not flow.acquire(repo, owner, 600):
         return {"event": kind, "deferred": "another GitZoid run held this repo for 10 minutes; the next sweep catches up"}
     try:
+        if kind in ("pull_request", "issue_comment", "pull_request_review_comment") and repo not in settings.review_repos():
+            return {"event": kind, "ignored": f"reviews are off for {repo} (reviews: true turns them on)"}
         if kind == "pull_request":
             number, action = body["pull_request"]["number"], body.get("action")
             if action == "closed":

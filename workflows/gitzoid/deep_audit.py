@@ -7,7 +7,7 @@ pull requests that touched sensitive code are read first. One run reads for
 at most `audit.budget_minutes`, then stops and resumes the next day. New
 findings go to the group's page and list, like the security watch.
 
-Admins can start it from the Console with Run now.
+Admins can start it from Settings, Agents, GitZoid, Runs & schedules, with Run now.
 """
 from __future__ import annotations
 
@@ -199,6 +199,8 @@ def audit_group_view(repos: list[str]) -> dict:
 @workflow(schedule="daily at 03:00", catch_up=True, timeout="45m")
 def deep_audit():
     p = audit_plan()
+    if not p["groups"]:
+        return {"skipped": gz.settings.nothing_on(gz.settings.load(hub.setting("gitzoid")), "security")}
     settings = gz.settings.load(hub.setting("gitzoid"))
     new_by_group: dict[str, list] = {}
     done, unfinished = [], []

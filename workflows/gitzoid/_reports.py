@@ -155,7 +155,8 @@ def run_report(kind: str) -> dict:
     if team and not req.group and not req.repos:
         groups = gz.reports.monthly_groups(settings, kind)
         if not groups and hub.trigger == "schedule":
-            return {"skipped": f"no digest group lists {kind} under monthly_reports"}
+            return {"skipped": gz.settings.nothing_on(settings, "reports") if not settings.report_repos()
+                    else f"no digest group lists {kind} under monthly_reports"}
         targets = [gz.reports.ReportRequest(**{**req.model_dump(), "group": g}) for g in groups] or [req]
     else:
         targets = [req]
@@ -187,7 +188,7 @@ def run_report(kind: str) -> dict:
         subject, body = gz.mail.report_email(kind, name, label, narrative, n, data["coverage"], gz.runtime.link_of(art),
                                              gz.runtime.pr_repos(settings))
         if team and t.group and not gz.runtime.refresh_only(hub):
-            gz.runtime.email_list(hub, settings.digest_groups[t.group].email_list, subject, body, art)
+            gz.runtime.email_list(hub, gz.reports.all_groups(settings)[t.group].email_list, subject, body, art)
         elif hub.trigger == "personal_schedule":
             hub.send_email(subject[:200], body, artifacts=[art], raise_on_failure=False, body_format="html")
         out.append({"report": name, "period": label, "headline": narrative["headline"],

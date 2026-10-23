@@ -38,6 +38,8 @@ SAFETY_SWEEP = timedelta(minutes=30)
 @step(max_attempts=2)
 def sweep_plan() -> dict:
     settings, store, gh = flow.ctx()
+    if not settings.review_repos():
+        return {"skip": gz.settings.nothing_on(settings, "reviews")}
     now = gh.now()
     if settings.trigger == "webhook":
         last = store.cursor("sweep:last")
@@ -46,7 +48,7 @@ def sweep_plan() -> dict:
     store.save_cursor("sweep:last", now.isoformat())
     hub_rules, guide = gz.rules.hub_rules(flow.HUB_DIR), gz.rules.guide(flow.HUB_DIR)
     repos, errors = [], []
-    for repo in settings.repo_names():
+    for repo in settings.review_repos():
         try:
             pulls = gh.open_pulls(repo)
             repo_controls = flow.controls(gh, store, repo)
@@ -107,7 +109,7 @@ def sweep_plan() -> dict:
         except Exception as exc:  # noqa: BLE001 - one unreachable repo never stops the others
             errors.append({"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]})
     skipped = [{"pr": f"{r['repo']}#{r['number']}", "reason": r.get("note") or r.get("pause_reason")}
-               for r in store.reviews() if r["repo"] in settings.repo_names() and r["state"] in ("skipped", "paused")]
+               for r in store.reviews() if r["repo"] in settings.review_repos() and r["state"] in ("skipped", "paused")]
     return {"skipped": skipped, "repos": repos, "budget": settings.review.max_prs_per_run, "owner": f"sweep-{uuid.uuid4().hex[:12]}",
             "errors": errors}
 

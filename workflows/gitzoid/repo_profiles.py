@@ -1,16 +1,18 @@
 """repo_profiles: what each repo is, its parts and where sign-in lives.
 
-Built at setup. After that a profile is rebuilt only when the code it
-describes changed: a default-branch push that touched a manifest, a route
-file, sign-in or permission code, or the top-level layout. The daily check
-compares each profile's commit with the branch; quiet repos cost no model
-call. Anyone allowed can refresh one repo from chat ("refresh the profile of
+A repo with no profile gets one on the next run (every 15 minutes), so chat
+and reviews have it soon after a repo is added. After that a profile is
+rebuilt only when the code it describes changed: a default-branch push that
+touched a manifest, a route file, sign-in or permission code, or the
+top-level layout. That comparison runs once a day per repo; quiet repos cost
+no model call. Anyone allowed can refresh one repo from chat ("refresh the profile of
 acme/billing"); it asks for confirmation because it makes a model call.
 """
 from __future__ import annotations
 
 import hashlib
 import importlib.util
+from datetime import timedelta
 import sys
 from pathlib import Path
 
@@ -32,6 +34,7 @@ def _flow():
 
 flow = _flow()
 gz = flow.gz
+DAILY = timedelta(hours=20)   # the code-changed check, at most once a day per repo
 
 
 class ProfileRequest(BaseModel):
@@ -47,6 +50,7 @@ def profiles_plan(repo: str | None) -> dict:
             raise ValueError(f"{repo} is not one of GitZoid's repos: {', '.join(settings.repo_names())}")
         return {"build": [{"repo": repo, "reason": "requested"}], "fresh": []}
     build, fresh = [], []
+    now = gh.now()
     for name in settings.repo_names():
         prof = store.profile(name)
         if prof is None:
@@ -55,6 +59,11 @@ def profiles_plan(repo: str | None) -> dict:
         if prof["stale"]:
             build.append({"repo": name, "reason": prof["stale_reason"] or "marked stale"})
             continue
+        checked = store.cursor(f"profile-check:{name}")
+        if checked and checked["value"] and now - gz.github.ts(checked["value"]) < DAILY:
+            fresh.append(name)
+            continue
+        store.save_cursor(f"profile-check:{name}", now.isoformat())
         try:
             head = gh.branch_sha(name, gh.default_branch(name))
             if head == prof["sha"]:
@@ -82,10 +91,12 @@ def collect(repo: str) -> dict:
 
 @step()
 def save(repo: str, sha: str, facts: dict, summary: dict) -> None:
-    gz.store.Store(hub.data_dir).save_profile(repo, sha, {"facts": facts, "summary": summary})
+    settings, store, gh = flow.ctx()
+    store.save_profile(repo, sha, {"facts": facts, "summary": summary})
+    store.save_cursor(f"profile-check:{repo}", gh.now().isoformat())  # just built: no change check until tomorrow
 
 
-@workflow(schedule="daily at 04:00", inputs=ProfileRequest, as_tool=True, confirm=True, catch_up=True,
+@workflow(schedule="every 15 minutes", inputs=ProfileRequest, as_tool=True, confirm=True, catch_up=True,
           surfaces=("web", "owui", "mcp"))
 def repo_profiles():
     """Rebuild a repo's profile (what it is, its parts, sign-in, data, sensitive areas) that reviews and chat use."""

@@ -1,37 +1,42 @@
-# Settings for GitZoid's workflows and tools. The next run reads changes; no
-# restart needed. Every key is optional; the comments show the defaults.
-# A wrong key or value fails the next run with a message that names it.
+# GitZoid's settings. Yours to edit: updates to this repo never change this
+# file (new options get a default in code and a line in CHANGELOG.md). The next
+# run reads changes, no restart needed. A wrong key or value fails the next run
+# with a message that names it. SETUP.md explains every choice.
 
 gitzoid:
-  # sample: the bundled fictional repo in raw_data/sample/ (no GitHub token; model access still required).
-  # github: the repos below, using a PAT or renewable GitHub App credentials (see README).
-  source: sample
-  # poll: every 2 minutes, no public URL needed. webhook: instant, needs the
-  # `webhooks:` block below and a GitHub webhook (README.md, "Instant reviews").
+  version: 2                # nothing runs on its own until a repo below turns it on
+  # sample: the fictional kestrel-oak/storefront repo, never touches GitHub.
+  # github: the repos below, read with the GITHUB_TOKEN secret (or a GitHub App).
+  source: github
+  # poll: every 2 minutes, no public URL needed. webhook: instant, needs a
+  # GitHub webhook (SETUP.md, "Instant reviews").
   trigger: poll
-  # false: GitZoid ignores pull request comments (no @gitzoid). Per repo too.
+  # false: GitZoid ignores @gitzoid in pull request comments. Per repo too.
   commands: true
-  # Context for every review, as today's "additional context".
+  # Context added to every review.
   context: ""
 
-  repos:
-    - name: kestrel-oak/storefront
-      # severity_floor: high          # per repo; the repo's review.md can also set it
-      # model: anthropic/claude-sonnet-4-5
-      context: "Customer emails and addresses live in the orders table."
-      # exclude_paths: [legacy/]      # this repo only, added to security.exclude_paths
+  # The repos GitZoid knows. Chat answers about any of them, and GitZoid makes
+  # each one a short profile (what it is, where sign-in lives). Each switch is
+  # off unless set to true:
+  #   reviews   pull request reviews, follow-ups and @gitzoid on pull requests
+  #   security  daily dependency watch and weekly deep audit, with alerts
+  #   reports   weekly digest and the monthly code and delivery reports
+  repos: []
+  # repos:
+  #   - name: your-org/api
+  #     reviews: true
+  #     security: true
+  #     reports: true
+  #     context: "Customer emails and addresses live in the orders table."
+  #   - name: your-org/web
+  #     reviews: true
+  #   - name: your-org/docs      # chat and a profile only
 
-  # Security groups: who hears about which repos. A repo belongs to at most
-  # one; repos in none alert to owner_list. audit_day is the deep audit day.
-  security_groups:
-    platform: {repos: [kestrel-oak/storefront], email_list: platform-security, audit_day: wednesday}
-
-  # Digest groups: one weekly digest and live team page per group.
-  # monthly_reports: team code and delivery reports on the 1st of each month.
-  digest_groups:
-    storefront: {repos: [kestrel-oak/storefront], email_list: storefront-digest, monthly_reports: [code, delivery]}
-
-  owner_list: gitzoid-owner
+  # Who gets email. Leave a list out and results stay on their pages in the web app.
+  email:
+    security: null          # e.g. platform-security, a list under email_lists below
+    reports: null           # e.g. eng-leads
 
   review:
     severity_floor: high        # high by default; medium and low are optional, with high confidence
@@ -84,13 +89,14 @@ gitzoid:
 # Email lists, edited by hub admins. One message per recipient; each must have
 # an account here or be at an allowed company domain. Messages are a short
 # summary and a link.
-email_lists:
-  platform-security: []
-  storefront-digest: []
-  gitzoid-owner: []
+email_lists: {}
+# email_lists:
+#   platform-security: [you@your-company.com]
+#   eng-leads: [lead@your-company.com]
 
 # GitHub's webhook endpoint for trigger: webhook. Always declared, because the
 # github_events workflow needs it to load; it accepts nothing until the hub's
-# .env has WEBHOOK_SECRET_GITHUB (README.md, "Instant reviews").
+# .env has WEBHOOK_SECRET_GITHUB (SETUP.md, "Instant reviews"). Until then
+# hubzoid doctor lists that secret as missing, which is expected.
 webhooks:
   github: {verify: github}

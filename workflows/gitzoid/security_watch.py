@@ -43,7 +43,7 @@ gz = flow.gz
 def security_plan() -> dict:
     settings = gz.settings.load(hub.setting("gitzoid"))
     groups = {g: {"repos": grp.repos, "email_list": grp.email_list} for g, grp in settings.security_scope().items()}
-    return {"groups": groups, "stamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
+    return {"groups": groups, "nothing_on": "" if groups else gz.settings.nothing_on(settings, "security"), "stamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
 
 
 @step(max_attempts=2)
@@ -130,6 +130,8 @@ def security_after_email(sent_ok: bool, keys: list[str], coverage: list[dict]) -
 @workflow(schedule="daily at 06:00", catch_up=True)
 def security_watch():
     p = security_plan()
+    if p["nothing_on"]:
+        return {"skipped": p["nothing_on"]}
     settings = gz.settings.load(hub.setting("gitzoid"))
     out = {}
     for group, g in p["groups"].items():

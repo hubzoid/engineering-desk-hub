@@ -471,7 +471,7 @@ def test_the_engine_can_load_every_workflow():
 def test_bare_choice_words_are_read_and_a_lost_account_stops_the_sweep(hub):
     """A reply with a bare word ("confidence": high) is read without a second
     call. An automation account that loses the agent stops the run, so the
-    Console shows it failed, instead of each pull request failing."""
+    web app shows it failed, instead of each pull request failing."""
     import json
 
     def bare(prompt, system, response_model):
@@ -502,8 +502,10 @@ def test_list_email_results():
     assert not gz.runtime.delivered({"status": "refused", "results": [], "message": "no list"})
 
 
-def test_template_ships_no_python_packages():
-    assert not list(h.TEMPLATE.rglob("__init__.py"))
+def test_hub_ships_no_python_packages():
+    for part in h.RUNTIME:
+        if (h.TEMPLATE / part).is_dir():
+            assert not list((h.TEMPLATE / part).rglob("__init__.py")), part
 
 
 # ------------------------------------------- failures part-way (Codex review)

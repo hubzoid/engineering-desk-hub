@@ -15,6 +15,7 @@ if name not in sys.modules:
     sys.modules[name] = module
     spec.loader.exec_module(module)
 flow = sys.modules[name]
+gz = flow.gz
 
 
 @step()
@@ -31,22 +32,27 @@ def check() -> dict:
             ci = gh.ci_status(repo, sha)
             # Read permissions are exercised. Write permissions are not tested by mutating a repo.
             identity = gh.login()
-            repos.append({"repo": repo, "ready": True, "identity": identity, "default_branch": branch,
+            repos.append({"repo": repo, "ready": True, "on": settings.switches(repo), "identity": identity, "default_branch": branch,
                           "open": len(pulls), "eligible": len(eligible), "ci": ci,
-                          "profile": "ready" if store.profile(repo) else "run repo_profiles next"})
+                          "profile": "ready" if store.profile(repo) else "made within 15 minutes of the hub running"})
         except Exception as exc:
             repos.append({"repo": repo, "ready": False, "error": f"{type(exc).__name__}: {exc}"[:300]})
     from hubzoid.access import store_for
     subject = hub.user.email or hub.user.id
     access = store_for(flow.HUB_DIR).can(subject, hub.name, "gitzoid")
     return {"chat_tools": "enabled for " + subject if access else
-            "Not enabled for " + subject + "; choose GitZoid tools in Console → Access, or use hubzoid grant",
+            "Not enabled for " + subject + ". Grant GitZoid tools in Settings, Agents, GitZoid, Access, "
+            "or run: hubzoid grant " + subject + " gitzoid .",
             "source": settings.source, "repos": repos,
             "ready": bool(repos) and all(r["ready"] for r in repos),
-            "publishing": "live" if settings.review.post_to_github else "preview; nothing written to GitHub",
+            "switches": "version 1 settings: every repo has everything on. Add version: 2 and per-repo switches to choose."
+            if settings.legacy else "per repo, reviews, security and reports are off unless set to true",
+            "publishing": "live" if gz.settings.publishing(settings) == "live" else "preview; nothing written to GitHub",
             "backlog": settings.review.backlog, "reviews_per_sweep": settings.review.max_prs_per_run,
             "model": "uses MODEL in the Hub .env unless a workflow override is selected; not tested by this check",
-            "next": "Run repo_profiles, then pr_sweep. Open the results in Console. Start hubzoid run to keep schedules active.",
+            "next": ("Add repos and switches in workflows/settings.yaml." if not repos else
+                     "Start hubzoid run (with HUBZOID_SCHEDULES=1). Results are in Settings, Agents, GitZoid, Runs & schedules, "
+                     "or ask GitZoid in chat."),
             "write_permissions": "not tested; posting requires Pull requests and Issues write, Commit statuses write",
             "email": "optional; no email is sent by this check"}
 

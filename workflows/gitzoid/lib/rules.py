@@ -27,6 +27,7 @@ import yaml
 from .diff import added_lines
 
 RULES_DIR = Path("knowledge") / "review-rules"
+EXAMPLES = "examples"   # shipped example rules: on in sample mode, copied up to use them
 GUIDE = Path("knowledge") / "review-guide.md"
 REVIEW_MD = (".gitzoid/review.md", "review.md")
 CONVENTIONS = ("CLAUDE.md", "AGENTS.md", "CONTRIBUTING.md")
@@ -70,10 +71,23 @@ def _list(v, limit: int = 20) -> list[str]:
 
 # ---------------------------------------------------------------- hub rules
 
+def _sample_mode(hub_dir: Path) -> bool:
+    from .settings import SettingsError, read_file
+    try:
+        return read_file(Path(hub_dir))[0].source == "sample"
+    except (SettingsError, OSError, ValueError):
+        return False
+
+
 def hub_rules(hub_dir: Path) -> list[dict]:
+    """The team's rules: one file each directly in knowledge/review-rules/.
+    The examples/ folder below it is off, except in sample mode."""
     out = []
     folder = Path(hub_dir) / RULES_DIR
-    for path in sorted(folder.glob("*.md")) if folder.is_dir() else []:
+    paths = sorted(folder.glob("*.md")) if folder.is_dir() else []
+    if _sample_mode(hub_dir):
+        paths += sorted((folder / EXAMPLES).glob("*.md"))
+    for path in paths:
         meta, body = front_matter(path.read_text())
         severity = str(meta.get("severity") or "high").lower()
         pattern = meta.get("pattern")

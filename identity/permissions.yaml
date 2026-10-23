@@ -1,4 +1,4 @@
-# Labels for GitZoid's restricted capabilities in the Console.
+# Labels for GitZoid's restricted capabilities in Settings, Agents, Access.
 gitzoid:
   label: GitZoid tools
   description: Ask about pull requests, findings, code, history, security and repo profiles; draft rules.
