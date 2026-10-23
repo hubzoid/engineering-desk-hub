@@ -158,12 +158,13 @@ def run_report(kind: str) -> dict:
             return {"skipped": gz.settings.nothing_on(settings, "reports") if not settings.report_repos()
                     else f"no digest group lists {kind} under monthly_reports"}
         targets = [gz.reports.ReportRequest(**{**req.model_dump(), "group": g}) for g in groups] or [req]
+        scheduled = set(groups)
     else:
-        targets = [req]
+        targets, scheduled = [req], set()
     out = []
     for t in targets:
         try:
-            name, repos = gz.reports.scope(t, settings)
+            name, repos = gz.reports.scope(t, settings, scheduled=t.group in scheduled)
         except ValueError as exc:
             if hub.trigger == "tool":
                 return {"refused": str(exc)}

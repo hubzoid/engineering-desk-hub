@@ -58,6 +58,12 @@ def mark_closed(repo: str, number: int) -> None:
     gz.store.Store(hub.data_dir).save_review(repo, number, state="closed")
 
 
+@step()
+def profile_pending(repo: str) -> bool:
+    settings, store, _ = flow.ctx()
+    return flow.waiting_for_profile(settings, store, repo)
+
+
 @step(max_attempts=3)
 def open_numbers(repo: str) -> list[int]:
     settings, store, gh = flow.ctx()
@@ -88,6 +94,8 @@ def github_events():
                 return {"event": kind, "action": action, "pr": number}
             if action not in PR_ACTIONS:
                 return {"event": kind, "action": action, "ignored": "not a change GitZoid reviews"}
+            if profile_pending(repo):
+                return {"event": kind, "action": action, "deferred": "waiting for the repo's first profile; a sweep reviews it"}
             return {"event": kind, "action": action, **flow.review_pr(repo, number)}
         if kind in ("issue_comment", "pull_request_review_comment"):
             if body.get("action") not in ("created", "edited"):
@@ -106,7 +114,7 @@ def github_events():
             if body.get("ref") != f"refs/heads/{default}":
                 return {"event": kind, "ignored": "not the default branch"}
             res = flow.on_push(repo, flow.push_files(body))
-            if res["rules_changed"]:
+            if res["rules_changed"] and repo in settings.review_repos() and not profile_pending(repo):
                 res["re_reviewed"] = [flow.review_pr(repo, n) for n in open_numbers(repo)]
             return {"event": kind, **res}
         return {"event": kind, "ignored": "not an event GitZoid uses"}

@@ -39,18 +39,18 @@ gitzoid:
     reports: null           # e.g. eng-leads
 
   review:
-    severity_floor: high        # high by default; medium and low are optional, with high confidence
-    backlog: all                # all open PRs, in batches; alternatives: latest or new
+    severity_floor: high        # high by default. medium and low are optional, with high confidence
+    backlog: all                # all open PRs, in batches. Alternatives: latest or new
     first_run_limit: 6          # first sweep: with backlog: latest, select the newest N eligible PRs
     max_prs_per_run: 5          # reviews per sweep, to bound cost
     max_findings: 8             # inline comments per review
-    max_diff_chars: 200000      # diff read per review, code first; a bigger change is reviewed in part and says so
-    max_age_days: 0             # 0: no age cutoff; otherwise older PRs wait for a push or manual review
+    max_diff_chars: 200000      # diff read per review, code first. A bigger change is reviewed in part and says so
+    max_age_days: 0             # 0: no age cutoff. Otherwise older PRs wait for a push or a manual review
     verify: true                # a second pass tries to refute each finding against the whole file
     post_to_github: false       # true: post summary, inline comments and status (SETUP.md, "Publish reviews")
     wait_for_profile_minutes: 10  # a new repo's first reviews wait up to this long for its profile
     summary_on_clean: true      # a clean PR still gets the summary comment (what it does, suggestions)
-    auto_pause_after: 0         # 0: keep reviewing pushes; optional positive limit pauses busy PRs
+    auto_pause_after: 0         # 0: keep reviewing pushes. A positive limit pauses busy PRs
     skip_label: gitzoid-skip
     status_check: report        # off · report: pending, then success with counts · gate: failure while blocking findings are open
 
@@ -58,11 +58,11 @@ gitzoid:
     severity_floor: high        # plus anything CISA lists as exploited now, and advisories with no rating
     # The security watch and deep audit always skip test, sample, fixture, example,
     # vendored and build folders, and minified or generated code. Globs to skip too:
-    # `docs/` or `docs/**` is a folder; other patterns are fnmatch (* crosses /).
+    # `docs/` or `docs/**` is a folder. Other patterns are fnmatch (* crosses /).
     exclude_paths: []
 
   audit:
-    budget_minutes: 20          # per run; the audit resumes the next day
+    budget_minutes: 20          # per run. The audit resumes the next day
     safety_days: 8              # audit anyway if the audit day was missed
     verify: true                # a second pass tries to refute each finding before anyone is alerted
 
@@ -78,8 +78,8 @@ gitzoid:
     replies_per_person_per_hour: 10
 
   # Isolated Ruff/Gitleaks presets scan changed files, including dotfiles, as data.
-  # Custom SARIF commands require allow_project_code: true on that analyzer;
-  # they can execute PR configuration and are NOT sandboxed. Missing or unapproved
+  # Custom SARIF commands require allow_project_code: true on that analyzer.
+  # They can execute PR configuration and are NOT sandboxed. Missing or unapproved
   # tools are skipped with a note. Results are evidence for the reviewer.
   analyzers:
     - name: ruff
@@ -87,7 +87,7 @@ gitzoid:
     - name: gitleaks
       run: [gitleaks, dir, ., --report-format, sarif, --report-path, "-", --no-banner, --exit-code, "0", --redact]
 
-# Email lists, edited by hub admins. One message per recipient; each must have
+# Email lists, edited by hub admins. One message per recipient. Each must have
 # an account here or be at an allowed company domain. Messages are a short
 # summary and a link.
 email_lists: {}
@@ -96,7 +96,7 @@ email_lists: {}
 #   eng-leads: [lead@your-company.com]
 
 # GitHub's webhook endpoint for trigger: webhook. Always declared, because the
-# github_events workflow needs it to load; it accepts nothing until the hub's
+# github_events workflow needs it to load. It accepts nothing until the hub's
 # .env has WEBHOOK_SECRET_GITHUB (SETUP.md, "Instant reviews"). Until then
 # hubzoid doctor lists that secret as missing, which is expected.
 webhooks:

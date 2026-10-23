@@ -64,12 +64,28 @@ def rules_version(repo_controls: dict, hub_rules: list[dict], guide: str) -> str
 
 
 def configuration_version(settings, repo: str, repo_controls: dict, hub_rules: list, guide: str, profile: dict | None = None) -> str:
-    # The switches decide what runs, not what a review saw: turning reports on
-    # must not re-review every pull request (and hubs from before the switches
-    # keep the same fingerprint).
-    return gz.rules.fingerprint(repo_controls, hub_rules, guide, settings.review.model_dump(),
+    # The switches and the profile wait decide what runs, not what a review saw:
+    # turning reports on must not re-review every pull request, and hubs from
+    # before these settings keep exactly the same fingerprint.
+    return gz.rules.fingerprint(repo_controls, hub_rules, guide, settings.review.model_dump(exclude={"wait_for_profile_minutes"}),
                                 settings.repo(repo).model_dump(exclude={"reviews", "security", "reports"}), settings.context,
                                 [a.model_dump() for a in settings.analyzers], settings.commands, gz.profiles.content(profile), hub.secret("MODEL", ""))
+
+
+def waiting_for_profile(settings, store, repo: str) -> bool:
+    """A new repo's first reviews wait for its profile, which is part of each
+    review: reviewing first means reviewing every pull request again a few
+    minutes later. Up to review.wait_for_profile_minutes, on the real clock
+    (the sample's clock is fixed)."""
+    minutes = settings.review.wait_for_profile_minutes
+    if not minutes or store.profile(repo) is not None:
+        return False
+    now = datetime.now(timezone.utc)
+    first = store.cursor(f"profile-wait:{repo}")
+    if not first or not first["value"]:
+        store.save_cursor(f"profile-wait:{repo}", now.isoformat())
+        return True
+    return now - datetime.fromisoformat(first["value"]) < timedelta(minutes=minutes)
 
 
 def publication_version(settings, repo: str) -> str:

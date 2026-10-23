@@ -1,5 +1,5 @@
 version: 1
-# GitZoid's own setup checks. `hubzoid hub doctor .` runs them; `hubzoid doctor .` includes them.
+# GitZoid's own setup checks. `hubzoid hub doctor .` runs them, and `hubzoid doctor .` includes them.
 doctor:
   - id: gitzoid.settings
     entrypoint: doctor/checks.py:settings

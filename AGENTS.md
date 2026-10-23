@@ -24,8 +24,8 @@ For setup, point to `README.md` and `SETUP.md`, and to `hubzoid hub doctor .`.
 Never ask for tokens in chat: the token goes in the hub's `.env` (SETUP.md).
 
 On repos with reviews on, eligible open PRs are queued in bounded batches. Drafts,
-bots, age limits, backlog policy, publishing and merge gates are configurable;
-never describe optional limits as mandatory. Closed/merged PRs are report history,
+bots, age limits, backlog policy, publishing and merge gates are configurable.
+Never describe optional limits as mandatory. Closed/merged PRs are report history,
 not retroactive reviews. Say merged unless deployment evidence is available.
 Show incomplete checks, skipped work, and reviewed/published commits separately.
 
@@ -33,20 +33,20 @@ Show incomplete checks, skipped work, and reviewed/published commits separately.
 
 | Question | Tool |
 |---|---|
-| What is waiting, stuck, paused or failing; security at a glance | `gitzoid_status` |
-| Where is X in the code; show me a file | `find_code`, then `read_code` |
-| A pull request's review, findings and fix prompts; has the latest push been reviewed | `pr_details` |
+| What is waiting, stuck, paused or failing, and security at a glance | `gitzoid_status` |
+| Where is X in the code, or show me a file | `find_code`, then `read_code` |
+| A pull request's review, findings and fix prompts, and whether the latest push was reviewed | `pr_details` |
 | Findings across pull requests, by repo, rule or state | `findings` |
 | What changed in a repo or path, and when | `history` |
 | Are we exposed to a CVE or a package version | `security` |
 | What a repo is, where sign-in lives | `repo_profile` |
 | Which rules apply to a file | `rules_for` |
-| "Remember that..." or "add a rule" | `propose_rule` (it drafts; an admin approves) |
+| "Remember that..." or "add a rule" | `propose_rule` (it drafts, an admin approves) |
 | Rule drafts waiting (admins) | `rule_drafts`, `decide_rule`. When a newer draft replaces a pending one (for example to narrow its paths), reject the older one so it cannot be approved by mistake |
 | Who has reviews waiting, what someone works on (managers) | `people_activity` |
 | A code, delivery or people report | the `code_report`, `delivery_report`, `people_report` workflow tools |
 | Review my local changes before I push | the `review_diff` workflow tool |
-| Keep a report fresh on a schedule; what have I scheduled | `schedule_workflow`, `my_schedules`, `change_schedule`, `my_reports` |
+| Keep a report fresh on a schedule, or list what I scheduled | `schedule_workflow`, `my_schedules`, `change_schedule`, `my_reports` |
 | Issues, Actions runs and logs, releases, branches, PRs GitZoid has not reviewed, repos GitZoid does not list | GitHub's own read-only tools, when the `github` connector is on |
 
 GitZoid's own tools cover the repos listed in `workflows/settings.yaml` and
@@ -64,7 +64,7 @@ not available to someone, they do not have that grant: say who can give it
 Fill the report inputs from the request: period (last_week, last_month,
 last_n_days with days, or custom with start and end), and a group or repos.
 Name the report and period back before you start it. Return the link the
-workflow gives you. A person's report is private to them; team pages come
+workflow gives you. A person's report is private to them. Team pages come
 from the monthly schedule or an admin's Run now. A schedule needs a rolling
 period, not fixed dates.
 
@@ -75,7 +75,7 @@ their own coding agent (Claude Code or Codex) with their own GitHub login:
 read the findings and fix prompts with `pr_details`, fix, run the tests,
 optionally check with `review_diff`, push, then wait until `pr_details` says
 the latest push is done, and repeat at most three rounds. Never dismiss a
-finding for them; dismissing is their decision. In web chat, give them the
+finding for them. Dismissing is their decision. In web chat, give them the
 fix prompts to paste.
 
 ## Rules for answers

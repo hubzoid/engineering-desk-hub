@@ -1,4 +1,4 @@
-"""GitZoid's doctor checks: `hubzoid hub doctor .` runs them, `hubzoid doctor .`
+"""GitZoid's doctor checks: `hubzoid hub doctor .` runs them, and `hubzoid doctor .`
 includes them. Each returns one row with what is wrong and the next step, and
 never prints a credential. They only read: no GitHub write, no model call."""
 from __future__ import annotations
@@ -7,6 +7,9 @@ import importlib.util
 import os
 import sys
 from pathlib import Path
+
+
+LIMIT = 20   # repos checked here, one GET each, inside doctor's time limit
 
 
 def _row(status: str, summary: str, recovery: str | None = None, details: dict | None = None) -> dict:
@@ -30,10 +33,10 @@ def _settings(hub_dir: Path):
 
 
 def _env(hub_dir: Path) -> dict:
-    """The process environment over the hub's .env, as `hubzoid run` sees it."""
+    """The environment as the hub sees it: its .env wins over the shell."""
     from dotenv import dotenv_values
 
-    return {**{k: v for k, v in dotenv_values(hub_dir / ".env").items() if v is not None}, **os.environ}
+    return {**os.environ, **{k: v for k, v in dotenv_values(hub_dir / ".env").items() if v is not None}}
 
 
 def settings(context) -> dict:
@@ -82,6 +85,9 @@ def github(context) -> dict:
     if env.get("GITHUB_APP_ID"):
         return _row("info", "A GitHub App is set. Run hubzoid schedule run . setup_check to test each repo.")
     token = (env.get("GITHUB_TOKEN") or "").strip()
+    if not token and (context.get("available") or {}).get("GITHUB_TOKEN"):
+        return _row("info", "A GitHub token is set outside .env, so this check cannot read it.",
+                    "Run hubzoid schedule run . setup_check to test each repo with it.")
     if not token:
         return _row("fail", "No GitHub token: GitZoid and chat cannot read GitHub.",
                     "Add GITHUB_TOKEN to .env: a fine-grained, read-only token for your repos. "
@@ -93,8 +99,9 @@ def github(context) -> dict:
     problems, ok = [], []
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
                "X-GitHub-Api-Version": "2022-11-28"}
+    names = s.repo_names()
     with httpx.Client(timeout=8, headers=headers) as client:
-        for name in s.repo_names()[:20]:
+        for name in names[:LIMIT]:
             try:
                 r = client.get(f"https://api.github.com/repos/{name}")
             except httpx.HTTPError as exc:
@@ -110,4 +117,7 @@ def github(context) -> dict:
         return _row("fail", "The token cannot read " + "; ".join(problems) + ".",
                     "Give the token access to these repos (Contents, Metadata, Pull requests: read) "
                     "or fix the names in workflows/settings.yaml.")
+    if len(names) > LIMIT:
+        return _row("warn", f"The token reads the first {LIMIT} of {len(names)} listed repos. The rest were not checked.",
+                    "Run hubzoid schedule run . setup_check to check every repo.")
     return _row("ok", f"The token reads all {len(ok)} listed repos.")

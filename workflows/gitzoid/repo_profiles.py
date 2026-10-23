@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import sys
 from pathlib import Path
 
@@ -51,7 +51,7 @@ def profiles_plan(repo: str | None) -> dict:
             raise ValueError(f"{repo} is not one of GitZoid's repos: {', '.join(settings.repo_names())}")
         return {"build": [{"repo": repo, "reason": "requested"}], "fresh": []}
     build, fresh = [], []
-    now = gh.now()
+    now = datetime.now(timezone.utc)   # the real clock: the sample's is fixed
     for name in settings.repo_names():
         prof = store.profile(name)
         if prof is None:
@@ -61,7 +61,7 @@ def profiles_plan(repo: str | None) -> dict:
             build.append({"repo": name, "reason": prof["stale_reason"] or "marked stale"})
             continue
         checked = store.cursor(f"profile-check:{name}")
-        if checked and checked["value"] and now - gz.github.ts(checked["value"]) < DAILY:
+        if checked and checked["value"] and now - datetime.fromisoformat(checked["value"]) < DAILY:
             fresh.append(name)
             continue
         store.save_cursor(f"profile-check:{name}", now.isoformat())
@@ -94,7 +94,7 @@ def collect(repo: str) -> dict:
 def save(repo: str, sha: str, facts: dict, summary: dict) -> None:
     settings, store, gh = flow.ctx()
     store.save_profile(repo, sha, {"facts": facts, "summary": summary})
-    store.save_cursor(f"profile-check:{repo}", gh.now().isoformat())  # just built: no change check until tomorrow
+    store.save_cursor(f"profile-check:{repo}", datetime.now(timezone.utc).isoformat())  # just built: no change check until tomorrow
 
 
 @workflow(schedule="every 2 minutes", inputs=ProfileRequest, as_tool=True, confirm=True, catch_up=True,
@@ -105,15 +105,15 @@ def repo_profiles():
     p = profiles_plan(hub.input.repo if hub.input else None)
     built = []
     for item in p["build"]:
-        problem = flow.charge(1)
-        if problem:
-            built.append({**item, "error": problem})
-            break
         try:
             data = collect(item["repo"])
         except Exception as exc:  # noqa: BLE001 - one unreachable repo never stops the others
             built.append({**item, "error": f"{type(exc).__name__}: {exc}"[:300]})
             continue
+        problem = flow.charge(1)  # after the checkout: a repo that cannot be read costs no model call
+        if problem:
+            built.append({**item, "error": problem})
+            break
         try:
             summary = flow.ask(gz.profiles.prompt(item["repo"], data["facts"]), system=gz.profiles.SYSTEM,
                                response_model=gz.models.Profile, model=settings.review.model)

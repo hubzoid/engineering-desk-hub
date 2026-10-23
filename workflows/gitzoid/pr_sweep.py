@@ -41,23 +41,17 @@ def sweep_plan() -> dict:
     if not settings.review_repos():
         return {"skip": gz.settings.nothing_on(settings, "reviews")}
     now = gh.now()
+    waiting = [r for r in settings.review_repos() if flow.waiting_for_profile(settings, store, r)]
+    ready = [r for r in settings.review_repos() if r not in waiting]
     if settings.trigger == "webhook":
         last = store.cursor("sweep:last")
         if last and last["value"] and now - gz.github.ts(last["value"]) < SAFETY_SWEEP:
             return {"skip": "webhook mode: the safety sweep runs every 30 minutes"}
-    store.save_cursor("sweep:last", now.isoformat())
+    if ready:  # a pass where every repo waits for its profile does not count as the safety sweep
+        store.save_cursor("sweep:last", now.isoformat())
     hub_rules, guide = gz.rules.hub_rules(flow.HUB_DIR), gz.rules.guide(flow.HUB_DIR)
-    repos, errors, waiting = [], [], []
-    for repo in settings.review_repos():
-        if store.profile(repo) is None and settings.review.wait_for_profile_minutes:
-            # The profile is part of each review: reviewing before it exists
-            # means reviewing every pull request again a few minutes later.
-            first = store.cursor(f"profile-wait:{repo}")
-            if not first:
-                store.save_cursor(f"profile-wait:{repo}", now.isoformat())
-            if not first or now - gz.github.ts(first["value"]) < timedelta(minutes=settings.review.wait_for_profile_minutes):
-                waiting.append(repo)
-                continue
+    repos, errors = [], []
+    for repo in ready:
         try:
             pulls = gh.open_pulls(repo)
             repo_controls = flow.controls(gh, store, repo)

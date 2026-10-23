@@ -64,11 +64,13 @@ def previous(start: datetime, end: datetime) -> tuple[datetime, datetime]:
     return start - (end - start), start
 
 
-def scope(req: ReportRequest, settings) -> tuple[str, list[str]]:
-    """The report's name and repos, limited to this agent's repos."""
+def scope(req: ReportRequest, settings, scheduled: bool = False) -> tuple[str, list[str]]:
+    """The report's name and repos, limited to this agent's repos. A scheduled
+    team report covers only repos with reports on. A report someone asks for
+    covers the whole group."""
     names = settings.repo_names()
     if req.group:
-        groups = all_groups(settings)
+        groups = settings.report_groups() if scheduled else all_groups(settings)
         if req.group not in groups:
             raise ValueError(f"no digest group {req.group!r}; groups: {', '.join(groups) or 'none'}")
         return req.group, list(groups[req.group].repos)
@@ -86,9 +88,9 @@ def slug(name: str) -> str:
 
 
 def all_groups(settings) -> dict:
-    """Named digest groups, each limited to its repos with reports on when it
-    has any, plus `all` when reports are on and no groups are named."""
-    return {**settings.digest_groups, **settings.report_groups()}
+    """Named digest groups as written, plus `all` (the repos with reports on)
+    when no groups are named."""
+    return {**settings.report_groups(), **settings.digest_groups}
 
 
 def monthly_groups(settings, kind: str) -> list[str]:

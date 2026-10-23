@@ -179,3 +179,75 @@ def test_turning_a_switch_on_does_not_re_review(hub):
     assert len(run(hub, "pr_sweep")["reviews"]) == 5
     switch(hub, reviews=True, security=True, reports=True)
     assert run(hub, "pr_sweep")["reviews"] == []
+
+
+# ------------------------------------------------- found by the Codex review
+
+def test_the_review_fingerprint_sees_exactly_what_it_saw_before_the_switches():
+    """Hubs from the bundled template keep their fingerprints, so upgrading
+    neither re-reviews nor releases a skipped backlog."""
+    s = load({"source": "github", "repos": [{"name": "a/api", "reviews": True}]})
+    repo = s.repo("a/api").model_dump(exclude={"reviews", "security", "reports"})
+    review = s.review.model_dump(exclude={"wait_for_profile_minutes"})
+    assert set(repo) == {"name", "severity_floor", "model", "context", "commands", "status_check", "exclude_paths"}
+    assert set(review) == {"severity_floor", "backlog", "first_run_limit", "max_prs_per_run", "max_findings",
+                           "max_age_days", "max_diff_chars", "verify", "post_to_github", "summary_on_clean",
+                           "auto_pause_after", "skip_label", "skip_drafts", "skip_bots", "status_check", "model"}
+
+
+def _event(kind, body):
+    return {"body": {**body, "repository": {"full_name": REPO, "default_branch": "main"}},
+            "headers": {"x-github-event": kind, "x-github-delivery": f"d-{kind}"}}
+
+
+def test_a_rules_push_reviews_nothing_when_reviews_are_off(hub):
+    switch(hub, security=True)
+    pushed = run(hub, "github_events", trigger="webhook", event=_event("push", {
+        "ref": "refs/heads/main", "commits": [{"added": [], "modified": ["review.md"], "removed": []}]}))
+    assert pushed["rules_changed"] and "re_reviewed" not in pushed
+
+
+def test_webhook_reviews_wait_for_the_first_profile_too(hub):
+    switch(hub, reviews=True)
+    h.write_settings(hub, {"review": {"wait_for_profile_minutes": 10}})
+    pr = run(hub, "github_events", trigger="webhook", event=_event("pull_request", {
+        "action": "opened", "pull_request": {"number": 102}}))
+    assert "first profile" in pr["deferred"]
+
+
+def test_a_sweep_where_every_repo_waits_is_not_the_safety_sweep(hub):
+    switch(hub, reviews=True)
+    h.write_settings(hub, {"trigger": "webhook", "review": {"wait_for_profile_minutes": 10}})
+    assert run(hub, "pr_sweep")["waiting_for_profile"] == [REPO]
+    run(hub, "repo_profiles")
+    assert len(run(hub, "pr_sweep")["reviews"]) == 5  # not held back for 30 minutes
+
+
+def test_a_repo_that_cannot_be_read_costs_no_model_call(hub, monkeypatch):
+    calls = []
+    flow = h.flow(hub)
+    real = flow.charge
+    monkeypatch.setattr(flow, "charge", lambda n=1: calls.append(n) or real(n))
+    monkeypatch.setattr(h.lib(hub).checkout, "ensure", lambda *a, **k: (_ for _ in ()).throw(OSError("unreachable")))
+    out = run(hub, "repo_profiles")
+    assert out["built"][0]["error"].startswith("OSError") and calls == []
+
+
+def test_a_report_someone_asks_for_covers_the_whole_group():
+    s = load({"version": 2, "source": "github",
+              "repos": [{"name": "a/api", "reports": True}, {"name": "a/web"}],
+              "digest_groups": {"team": {"repos": ["a/api", "a/web"], "monthly_reports": ["code"]}}})
+    req = gz().reports.ReportRequest(period="last_month", group="team")
+    assert gz().reports.scope(req, s) == ("team", ["a/api", "a/web"])
+    assert gz().reports.scope(req, s, scheduled=True) == ("team", ["a/api"])
+
+
+def test_doctor_reads_the_hub_env_over_the_shell(tmp_path, monkeypatch):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("gz_doctor", h.TEMPLATE / "doctor" / "checks.py")
+    checks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checks)
+    (tmp_path / ".env").write_text("HUBZOID_SCHEDULES=1\n")
+    monkeypatch.setenv("HUBZOID_SCHEDULES", "0")
+    assert checks._env(tmp_path)["HUBZOID_SCHEDULES"] == "1"

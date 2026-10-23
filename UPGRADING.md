@@ -37,22 +37,26 @@ doctor` warns about it.
 To take this repo's fixes, update your hub folder in place. This keeps its
 name, which its access grants and stored state are tied to:
 
-1. Stop `hubzoid run` and let running work finish. Back up:
-   `hubzoid backup <your hub>`. If you set `HUBZOID_DATA_DIR`, the state is
-   there, not in the folder.
-2. Clone this repo next to your hub and copy its code over your hub folder:
+1. Stop `hubzoid run` and let running work finish. Back up both the state
+   (`hubzoid backup <your hub>`) and the files: copy the whole hub folder,
+   for example `cp -R my-gitzoid my-gitzoid.before-update`. `hubzoid backup`
+   saves state, not the hub's code and settings. If you set
+   `HUBZOID_DATA_DIR`, the state is there, not in the folder.
+2. Install Hubzoid 2.0.2 or later in the hub's virtual environment:
+   `python -m pip install "hubzoid>=2.0.2,<3"`.
+3. Clone this repo next to your hub and copy its code over your hub folder:
    `workflows/gitzoid/`, `restricted/`, `client/`, `evals/`, `doctor/`,
    `connectors/.mcp.json`, `AGENTS.md`, `hub.manifest.yaml`, `settings.yaml`,
    `raw_data/sample/`. Keep your `.env`, `.hubzoid/`,
    `workflows/settings.yaml` and `knowledge/review-rules/`.
-3. Add `HUBZOID_SCHEDULES=1` to `.env`. The bundled GitZoid's README did not
+4. Add `HUBZOID_SCHEDULES=1` to `.env`. The bundled GitZoid's README did not
    say so, so its schedules (polling, security watch, digests) may never have
    run under `hubzoid run`.
-4. Before anything runs, set `review.post_to_github: false` in your settings,
+5. Before anything runs, set `review.post_to_github: false` in your settings,
    then run `hubzoid hub doctor <your hub>` and
    `hubzoid schedule run <your hub> setup_check`. Start the hub, check a
    preview sweep, then set publishing back on.
-5. When you are ready, add `version: 2` under `gitzoid:` and turn on
+6. When you are ready, add `version: 2` under `gitzoid:` and turn on
    `reviews`, `security` and `reports` per repo. Until then everything stays on.
 
 Also changed since the bundled version:
@@ -66,7 +70,9 @@ Also changed since the bundled version:
   (`connectors/.mcp.json`), using `GITHUB_TOKEN`.
 - Messages say Settings instead of Console, as Hubzoid 2.0 does.
 
-Rollback: stop the hub and restore the backup from step 1.
+Rollback: stop the hub, put the folder copy from step 1 back in place of the
+hub folder, restore the state with `hubzoid restore`, and reinstall the
+Hubzoid version you had before.
 
 ## From WaveAssist GitZoid
 
