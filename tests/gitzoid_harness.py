@@ -1,4 +1,4 @@
-"""Run the GitZoid template's workflows and tools in tests, on Hubzoid's own
+"""Run GitZoid's workflows and tools in tests, on Hubzoid's own
 parts: workflows through `hubzoid.workflows.testing.run_local` (the real run
 context, input checks and email-list rules, with pages and email captured),
 people and grants in the hub's real access store, and tools through the real
@@ -44,7 +44,7 @@ def isolate(monkeypatch) -> None:
 
 
 def make_hub(tmp: Path, name: str = "gitzoid-hub") -> Path:
-    """A copy of the template with its people in the hub's access store: the
+    """A copy of this hub with its people in the hub's access store: the
     automation account and three people, each able to use the agent; the
     people also hold `gitzoid` (the chat and MCP tools)."""
     from hubzoid.access import store_for

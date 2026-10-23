@@ -1,0 +1,12 @@
+version: 1
+# Secrets GitZoid reads, from the hub's .env (never committed) or the host's
+# environment. Settings, Agents, GitZoid, Setup and `hubzoid hub settings .`
+# show whether each is set, never its value.
+# What GitZoid does per repo is in workflows/settings.yaml.
+settings:
+  - name: GITHUB_TOKEN
+    description: A fine-grained GitHub token for your repos. Read-only (Contents, Metadata, Pull requests, Issues, Actions, Commit statuses) for preview and chat. Add Pull requests, Issues and Commit statuses write only to publish reviews.
+    secret: true
+  - name: WEBHOOK_SECRET_GITHUB
+    description: Only with trigger webhook. The shared secret of the GitHub webhook that sends instant review events.
+    secret: true

@@ -1,0 +1,15 @@
+version: 1
+# GitZoid's own setup checks. `hubzoid hub doctor .` runs them; `hubzoid doctor .` includes them.
+doctor:
+  - id: gitzoid.settings
+    entrypoint: doctor/checks.py:settings
+    timeout_seconds: 10
+    required: true
+  - id: gitzoid.schedules
+    entrypoint: doctor/checks.py:schedules
+    timeout_seconds: 10
+    required: true
+  - id: gitzoid.github
+    entrypoint: doctor/checks.py:github
+    timeout_seconds: 25
+    required: true

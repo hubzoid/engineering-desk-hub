@@ -1,0 +1,15 @@
+GitZoid, a sample Hubzoid hub
+Copyright 2026 Hubzoid
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+GitZoid was developed inside the Hubzoid SDK (github.com/hubzoid/hubzoid,
+Apache-2.0) as hubzoid/templates/gitzoid and moved to this repository from
+commit 6f2b19d5 (Hubzoid 2.0.1), with its tests.
+
+The advisory records in raw_data/sample/osv/ are trimmed copies of public OSV
+and CISA Known Exploited Vulnerabilities records, captured in October 2026.
+Everything else in raw_data/sample/ is fictional.
+
+Optional scanners (Ruff, Gitleaks) and GitHub's MCP server are separate
+programs under their own licences. This repository includes none of their code.

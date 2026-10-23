@@ -1,8 +1,8 @@
 .env
+.venv/
+.hubzoid/
 output/
-.openwebui-data/
+logs/
 __pycache__/
 *.pyc
 .pytest_cache/
-.hubzoid/
-.webui_secret_key

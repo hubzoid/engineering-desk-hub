@@ -21,7 +21,7 @@ reviews, security and reports are on. Nothing runs on its own until a repo
 turns it on in `workflows/settings.yaml` (`reviews: true`, `security: true`,
 `reports: true`). Anyone can ask about any repo in chat whatever its switches.
 For setup, point to `README.md` and `SETUP.md`, and to `hubzoid hub doctor .`.
-Never ask for tokens in chat: the token is set with `hubzoid secrets set`.
+Never ask for tokens in chat: the token goes in the hub's `.env` (SETUP.md).
 
 On repos with reviews on, eligible open PRs are queued in bounded batches. Drafts,
 bots, age limits, backlog policy, publishing and merge gates are configurable;

@@ -1,4 +1,4 @@
-"""GitZoid's chat and MCP tools (hubzoid/templates/gitzoid/restricted/*.py) on
+"""GitZoid's chat and MCP tools (restricted/*.py) on
 the sample, after a sweep, behind Hubzoid's access guard as the hub serves
 them. Tools read GitZoid's own store and GitHub (the offline sample here),
 with the caller from hubzoid.current_user()."""
@@ -7,9 +7,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from typer.testing import CliRunner
 
-from hubzoid import cli
 from tests import gitzoid_harness as h
 
 REPO = "kestrel-oak/storefront"
@@ -112,14 +110,15 @@ def test_tools_answer_signed_in_people_in_chat_and_mcp_only(hub):
     assert "signed-in people only" in h.invoke(tool)
 
 
-def test_init_copies_a_clean_template(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    r = CliRunner().invoke(cli.app, ["init", "gz", "--template", "gitzoid"])
-    assert r.exit_code == 0, r.output
-    hub = tmp_path / "gz"
-    for rel in ("AGENTS.md", "README.md", "workflows/settings.yaml", "workflows/gitzoid/pr_sweep.py",
+def test_the_repo_is_a_complete_hub():
+    root = h.TEMPLATE
+    for rel in ("AGENTS.md", "README.md", "SETUP.md", "UPGRADING.md", "requirements.txt", ".env.example",
+                "hub.manifest.yaml", "settings.yaml", "workflows/settings.yaml", "workflows/gitzoid/pr_sweep.py",
                 "workflows/gitzoid/lib/package.py", "restricted/gitzoid.py", "identity/permissions.yaml",
-                "knowledge/review-rules/staff-routes-need-sign-in.md", "raw_data/sample/sample.yaml",
-                "client/skills/gitzoid-fix/SKILL.md"):
-        assert (hub / rel).is_file(), rel
-    assert not list(hub.rglob("__pycache__")) and not (hub / ".hubzoid").exists()
+                "knowledge/review-rules/examples/staff-routes-need-sign-in.md", "raw_data/sample/sample.yaml",
+                "connectors/.mcp.json", "doctor/checks.py", "client/skills/gitzoid-fix/SKILL.md"):
+        assert (root / rel).is_file(), rel
+    ignored = (root / ".gitignore").read_text().split()
+    assert {".env", ".hubzoid/", ".venv/"} <= set(ignored) and "restricted/" not in ignored
+    assert "hubzoid>=2.0.2,<3" in (root / "requirements.txt").read_text()
+    assert "HUBZOID_SCHEDULES=1" in (root / ".env.example").read_text()
