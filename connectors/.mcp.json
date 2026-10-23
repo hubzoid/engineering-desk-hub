@@ -2,7 +2,7 @@
   "mcpServers": {
     "github": {
       "transport": "streamable-http",
-      "url": "https://api.githubcopilot.com/mcp-readonly/",
+      "url": "https://api.githubcopilot.com/mcp/readonly",
       "headers": {
         "Authorization": "Bearer ${GITHUB_TOKEN}",
         "X-MCP-Readonly": "true"
