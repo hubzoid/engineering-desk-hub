@@ -47,7 +47,8 @@ gitzoid:
     max_diff_chars: 200000      # diff read per review, code first; a bigger change is reviewed in part and says so
     max_age_days: 0             # 0: no age cutoff; otherwise older PRs wait for a push or manual review
     verify: true                # a second pass tries to refute each finding against the whole file
-    post_to_github: false       # true: post summary, inline comments and status (see README.md)
+    post_to_github: false
+    wait_for_profile_minutes: 0 # tests review at once; test_switches covers the wait       # true: post summary, inline comments and status (see README.md)
     summary_on_clean: true      # a clean PR still gets the summary comment (what it does, suggestions)
     auto_pause_after: 0         # 0: keep reviewing pushes; optional positive limit pauses busy PRs
     skip_label: gitzoid-skip

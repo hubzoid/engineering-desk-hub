@@ -47,8 +47,17 @@ def sweep_plan() -> dict:
             return {"skip": "webhook mode: the safety sweep runs every 30 minutes"}
     store.save_cursor("sweep:last", now.isoformat())
     hub_rules, guide = gz.rules.hub_rules(flow.HUB_DIR), gz.rules.guide(flow.HUB_DIR)
-    repos, errors = [], []
+    repos, errors, waiting = [], [], []
     for repo in settings.review_repos():
+        if store.profile(repo) is None and settings.review.wait_for_profile_minutes:
+            # The profile is part of each review: reviewing before it exists
+            # means reviewing every pull request again a few minutes later.
+            first = store.cursor(f"profile-wait:{repo}")
+            if not first:
+                store.save_cursor(f"profile-wait:{repo}", now.isoformat())
+            if not first or now - gz.github.ts(first["value"]) < timedelta(minutes=settings.review.wait_for_profile_minutes):
+                waiting.append(repo)
+                continue
         try:
             pulls = gh.open_pulls(repo)
             repo_controls = flow.controls(gh, store, repo)
@@ -111,7 +120,7 @@ def sweep_plan() -> dict:
     skipped = [{"pr": f"{r['repo']}#{r['number']}", "reason": r.get("note") or r.get("pause_reason")}
                for r in store.reviews() if r["repo"] in settings.review_repos() and r["state"] in ("skipped", "paused")]
     return {"skipped": skipped, "repos": repos, "budget": settings.review.max_prs_per_run, "owner": f"sweep-{uuid.uuid4().hex[:12]}",
-            "errors": errors}
+            "errors": errors, "waiting_for_profile": waiting}
 
 
 @step()
@@ -127,7 +136,8 @@ def pr_sweep():
     p = sweep_plan()
     if "skip" in p:
         return p
-    out = {"skipped": p.get("skipped", []), "reviews": [], "commands": [], "busy": [], "deferred": [], "errors": list(p["errors"])}
+    out = {"skipped": p.get("skipped", []), "reviews": [], "commands": [], "busy": [], "deferred": [], "errors": list(p["errors"]),
+           "waiting_for_profile": p.get("waiting_for_profile", [])}
     budget = p["budget"]
     for r in p["repos"]:
         repo = r["repo"]

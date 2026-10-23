@@ -34,7 +34,7 @@ def check() -> dict:
             identity = gh.login()
             repos.append({"repo": repo, "ready": True, "on": settings.switches(repo), "identity": identity, "default_branch": branch,
                           "open": len(pulls), "eligible": len(eligible), "ci": ci,
-                          "profile": "ready" if store.profile(repo) else "made within 15 minutes of the hub running"})
+                          "profile": "ready" if store.profile(repo) else "made within a few minutes of the hub running"})
         except Exception as exc:
             repos.append({"repo": repo, "ready": False, "error": f"{type(exc).__name__}: {exc}"[:300]})
     from hubzoid.access import store_for

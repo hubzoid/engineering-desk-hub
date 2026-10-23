@@ -64,8 +64,11 @@ def rules_version(repo_controls: dict, hub_rules: list[dict], guide: str) -> str
 
 
 def configuration_version(settings, repo: str, repo_controls: dict, hub_rules: list, guide: str, profile: dict | None = None) -> str:
+    # The switches decide what runs, not what a review saw: turning reports on
+    # must not re-review every pull request (and hubs from before the switches
+    # keep the same fingerprint).
     return gz.rules.fingerprint(repo_controls, hub_rules, guide, settings.review.model_dump(),
-                                settings.repo(repo).model_dump(), settings.context,
+                                settings.repo(repo).model_dump(exclude={"reviews", "security", "reports"}), settings.context,
                                 [a.model_dump() for a in settings.analyzers], settings.commands, gz.profiles.content(profile), hub.secret("MODEL", ""))
 
 

@@ -97,8 +97,8 @@ email_lists:
   can read through GitHub's tools. A repo listed with no switches (like
   `your-org/docs`) gets chat and a profile only.
 - **Profiles.** A new repo gets a short profile (what it is, its parts, where
-  sign-in lives) within 15 minutes. It is refreshed once a day, only when the
-  code changed.
+  sign-in lives) within a few minutes. Its first reviews wait for it, so they
+  are not done twice. It is refreshed once a day, only when the code changed.
 - **Email** is optional. Without an `email` list, alerts and reports stay on
   their pages in the web app. Each recipient needs an account on this Hubzoid
   or an allowed company domain.

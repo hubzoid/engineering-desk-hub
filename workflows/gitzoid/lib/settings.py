@@ -77,6 +77,7 @@ class ReviewSettings(_Strict):
     skip_label: str = "gitzoid-skip"
     skip_drafts: bool = True
     skip_bots: bool = True
+    wait_for_profile_minutes: int = Field(10, ge=0, le=120)  # a new repo's first reviews wait for its profile
     status_check: StatusCheck = "report"
     model: str | None = None
 

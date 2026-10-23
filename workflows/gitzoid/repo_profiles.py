@@ -1,7 +1,8 @@
 """repo_profiles: what each repo is, its parts and where sign-in lives.
 
-A repo with no profile gets one on the next run (every 15 minutes), so chat
-and reviews have it soon after a repo is added. After that a profile is
+A repo with no profile gets one on the next run (every 2 minutes), so chat
+and reviews have it soon after a repo is added. Its first reviews wait for it
+(review.wait_for_profile_minutes). After that a profile is
 rebuilt only when the code it describes changed: a default-branch push that
 touched a manifest, a route file, sign-in or permission code, or the
 top-level layout. That comparison runs once a day per repo; quiet repos cost
@@ -96,7 +97,7 @@ def save(repo: str, sha: str, facts: dict, summary: dict) -> None:
     store.save_cursor(f"profile-check:{repo}", gh.now().isoformat())  # just built: no change check until tomorrow
 
 
-@workflow(schedule="every 15 minutes", inputs=ProfileRequest, as_tool=True, confirm=True, catch_up=True,
+@workflow(schedule="every 2 minutes", inputs=ProfileRequest, as_tool=True, confirm=True, catch_up=True,
           surfaces=("web", "owui", "mcp"))
 def repo_profiles():
     """Rebuild a repo's profile (what it is, its parts, sign-in, data, sensitive areas) that reviews and chat use."""

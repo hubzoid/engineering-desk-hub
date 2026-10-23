@@ -16,8 +16,11 @@ bundled template.
 - **Chat reads more of GitHub** through GitHub's hosted MCP server in
   read-only mode (`connectors/.mcp.json`): issues, Actions runs and logs,
   releases, and any repo the token can read.
-- **Profiles sooner.** A repo without a profile gets one within 15 minutes.
-  The code-changed check still runs once a day.
+- **Profiles first.** A repo without a profile gets one within a few minutes,
+  and its first reviews wait for it (up to `review.wait_for_profile_minutes`,
+  10 by default), so open pull requests are not reviewed twice. The
+  code-changed check still runs once a day.
+- Turning `security` or `reports` on or off never re-reviews pull requests.
 - **Example rules** moved to `knowledge/review-rules/examples/`, on only in
   sample mode.
 - **Status says what is on.** `gitzoid_status`, `setup_check` and

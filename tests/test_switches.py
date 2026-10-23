@@ -162,3 +162,20 @@ def test_profiles_are_made_for_missing_repos_and_checked_once_a_day(hub, monkeyp
     monkeypatch.setattr(sample, "branch_sha", lambda self, *a, **k: calls.append(a) or "same")
     again = run(hub, "repo_profiles")
     assert again["built"] == [] and calls == []  # the code-changed check already ran today
+
+
+def test_a_new_repos_first_reviews_wait_for_its_profile(hub):
+    switch(hub, reviews=True)
+    h.write_settings(hub, {"review": {"wait_for_profile_minutes": 10}})
+    first = run(hub, "pr_sweep")
+    assert first["waiting_for_profile"] == [REPO] and first["reviews"] == []
+    run(hub, "repo_profiles")
+    second = run(hub, "pr_sweep")
+    assert second["waiting_for_profile"] == [] and len(second["reviews"]) == 5
+
+
+def test_turning_a_switch_on_does_not_re_review(hub):
+    switch(hub, reviews=True)
+    assert len(run(hub, "pr_sweep")["reviews"]) == 5
+    switch(hub, reviews=True, security=True, reports=True)
+    assert run(hub, "pr_sweep")["reviews"] == []
