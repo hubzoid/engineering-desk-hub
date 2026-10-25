@@ -88,8 +88,8 @@ name, which its access grants and stored state are tied to:
    for example `cp -R my-hub my-hub.before-update`. `hubzoid backup`
    saves state, not the hub's code and settings. If you set
    `HUBZOID_DATA_DIR`, the state is there, not in the folder.
-2. Install Hubzoid 2.0.2 or later in the hub's virtual environment:
-   `python -m pip install "hubzoid>=2.0.2,<3"`.
+2. Install Hubzoid 2.0.3 or later in the hub's virtual environment:
+   `python -m pip install "hubzoid>=2.0.3,<3"`.
 3. Clone this repo next to your hub and copy its code over your hub folder:
    `workflows/engineering_desk/`, `restricted/`, `client/`, `evals/`, `doctor/`,
    `connectors/.mcp.json`, `AGENTS.md`, `hub.manifest.yaml`, `settings.yaml`,

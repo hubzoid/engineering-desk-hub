@@ -3,7 +3,7 @@
 ## 1.0.0 (unreleased)
 
 GitZoid moves out of the Hubzoid SDK into this repo and becomes the
-Engineering Desk. It needs Hubzoid 2.0.2 or later within 2.x.
+Engineering Desk. It needs Hubzoid 2.0.3 or later within 2.x.
 [UPGRADING.md](UPGRADING.md) covers hubs made from the bundled template and
 the move from the old names.
 
@@ -44,4 +44,4 @@ the move from the old names.
 - `setup.py` is removed: the token goes in `.env`, repos and options in
   `workflows/settings.yaml`.
 - Messages say Settings instead of Console.
-- Tests and CI live here, on Hubzoid 2.0.2 and the latest 2.x.
+- Tests and CI live here, on Hubzoid 2.0.3 and the latest 2.x.

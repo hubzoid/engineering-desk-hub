@@ -1,2 +1,2 @@
-# Engineering Desk runs on Hubzoid 2.0.2 or later within 2.x.
-hubzoid>=2.0.2,<3
+# Engineering Desk runs on Hubzoid 2.0.3 or later within 2.x.
+hubzoid>=2.0.3,<3
