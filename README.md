@@ -41,13 +41,12 @@ Reviews, findings and schedules live in `.hubzoid/`. A restart carries on where 
 
 You need Python 3.11 or 3.12, Git, and Claude Code or Codex signed in on this machine. No API key. The quick start uses the fictional sample, so you need no GitHub token.
 
-Paste this into Claude Code or Codex, from any folder:
+Paste this into Claude Code or Codex:
 
 ```text
-Help me set up the Hubzoid Engineering Desk. Clone
-https://github.com/hubzoid/engineering-desk-hub into a folder called
-engineering-desk, cd in, and follow README.md and SETUP.md. Start with the
-fictional sample, and keep publishing to GitHub off until I say so.
+Clone https://github.com/hubzoid/engineering-desk-hub into a folder called
+engineering-desk, cd in, and follow SETUP.md to run the fictional sample.
+Keep publishing to GitHub off until I say so.
 ```
 
 Or by hand:
@@ -103,17 +102,18 @@ engineering-desk/
 └── connectors/.mcp.json          GitHub's read-only MCP server for chat
 ```
 
-Choose what runs on each repository in `workflows/settings.yaml`:
+Choose what runs on each repository in the `engineering_desk:` block of `workflows/settings.yaml`:
 
 ```yaml
-repos:
-  - name: your-org/api
-    reviews: true
-    security: true
-  - name: your-org/web
-    reviews: true
-    reports: true
-  - name: your-org/docs        # chat and a profile only
+engineering_desk:
+  repos:
+    - name: your-org/api
+      reviews: true
+      security: true
+    - name: your-org/web
+      reviews: true
+      reports: true
+    - name: your-org/docs      # chat and a profile only
 ```
 
 Reviews start in preview. When you like them, give the token write access and set `review.post_to_github: true`, and the desk comments on pull requests. A GitHub App gives it its own name. [SETUP.md](SETUP.md), "Publish reviews"
