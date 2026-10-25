@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        hubzoid: ["==2.0.2", ">=2.0.2,<3"]   # the minimum this repo promises, and the latest 2.x
+        hubzoid: ["==2.0.3", ">=2.0.3,<3"]   # the minimum this repo promises, and the latest 2.x
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
