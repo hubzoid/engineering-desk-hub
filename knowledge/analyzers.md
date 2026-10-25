@@ -1,6 +1,6 @@
 ---
 title: Open-source analyzers
-description: Optional tools GitZoid runs on each pull request's changed files.
+description: Optional tools Engineering Desk runs on each pull request's changed files.
 ---
 
 The supplied Ruff and Gitleaks presets scan changed files as data, including
@@ -8,7 +8,7 @@ dotfiles. They ignore PR-controlled configuration and suppression markers. Keep
 their `run` lists unchanged to retain this isolated preset behavior.
 
 Other SARIF commands, including modified presets, need `allow_project_code: true`
-on that analyzer under `gitzoid.analyzers` in `workflows/settings.yaml`. These
+on that analyzer under `engineering_desk.analyzers` in `workflows/settings.yaml`. These
 commands are **not sandboxed** and may execute PR-controlled configuration. An
 operator must decide whether the repositories and execution environment are
 appropriate before enabling them. The setting does not create a sandbox.

@@ -1,15 +1,15 @@
 version: 1
-# GitZoid's own setup checks. `hubzoid hub doctor .` runs them, and `hubzoid doctor .` includes them.
+# Engineering Desk's own setup checks. `hubzoid hub doctor .` runs them, and `hubzoid doctor .` includes them.
 doctor:
-  - id: gitzoid.settings
+  - id: engineering_desk.settings
     entrypoint: doctor/checks.py:settings
     timeout_seconds: 10
     required: true
-  - id: gitzoid.schedules
+  - id: engineering_desk.schedules
     entrypoint: doctor/checks.py:schedules
     timeout_seconds: 10
     required: true
-  - id: gitzoid.github
+  - id: engineering_desk.github
     entrypoint: doctor/checks.py:github
     timeout_seconds: 25
     required: true

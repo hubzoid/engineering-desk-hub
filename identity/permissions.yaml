@@ -1,13 +1,13 @@
-# Labels for GitZoid's restricted capabilities in Settings, Agents, Access.
-gitzoid:
-  label: GitZoid tools
+# Labels for Engineering Desk's restricted capabilities in Settings, Agents, Access.
+engineering_desk:
+  label: Engineering Desk tools
   description: Ask about pull requests, findings, code, history, security and repo profiles; draft rules.
   sensitive: true
-gitzoid_manager:
-  label: GitZoid people data
-  description: Counts per person for the digest groups set in this person's gitzoid_groups attribute.
+engineering_desk_manager:
+  label: Engineering Desk people data
+  description: Counts per person for the digest groups set in this person's engineering_desk_groups attribute.
   sensitive: true
-gitzoid_admin:
-  label: GitZoid rule approval
+engineering_desk_admin:
+  label: Engineering Desk rule approval
   description: Approve or reject drafted team rules. Approval writes the rule file.
   sensitive: true

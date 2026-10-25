@@ -1,4 +1,4 @@
-"""Kestrel & Oak storefront. Fictional sample code for the GitZoid template."""
+"""Kestrel & Oak storefront. Fictional sample code for the Engineering Desk."""
 from flask import Flask
 
 

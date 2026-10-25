@@ -1,6 +1,6 @@
 ---
-title: GitZoid review guide
-description: How GitZoid reviews a pull request. Read by every review and by the chat agent.
+title: Engineering Desk review guide
+description: How Engineering Desk reviews a pull request. Read by every review and by the chat agent.
 ---
 
 Review the change, not the author. Report a problem only when the diff shows
@@ -37,6 +37,6 @@ what the code does, no "consider". Cite the new-file line number from the
 diff.
 
 When the fix is a small mechanical change to that one line, put the corrected
-line in `suggestion`, exactly as it should read, with its indentation. GitZoid
+line in `suggestion`, exactly as it should read, with its indentation. Engineering Desk
 offers it as a one-click change only after the second pass confirms the
 finding. Leave it empty for anything larger.

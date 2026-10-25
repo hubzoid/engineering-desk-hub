@@ -1,4 +1,4 @@
-name: gitzoid
+name: engineering-desk
 on:
   push:
   pull_request:
