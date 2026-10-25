@@ -27,26 +27,15 @@
 
 ## How it works
 
-- **Sweep** checks your listed repositories for new pull requests and pushes every two minutes, or within seconds through a webhook.
-- **Review** reads the change with your team's rules, the repository's own rules and a profile of the repository, using the model in your `.env`.
-- **Verify** runs a second pass that tries to refute each finding, so what reaches you has survived a challenge.
-- **Preview** shows the comment the desk would post, and writes nothing to GitHub. When you like the reviews, turn on publishing and it posts a comment, inline findings and a status.
-- **Track** follows which findings get fixed, dismissed or deferred, across pushes.
+Each repository you list gets three switches, all off until you turn them on. Chat needs no switch.
+
+- **Reviews** (`reviews`). Every two minutes, or within seconds through a webhook, the desk reviews each new pull request and push against your team's rules, the repository's own rules and a profile of the repository. A second pass tries to refute each finding, so what reaches you has survived a challenge. It starts in **preview**, showing the comment it would post and writing nothing to GitHub, and it tracks which findings get fixed.
+- **Security** (`security`). Checks dependencies daily against known advisories and audits the code weekly. It alerts only when something new and serious appears.
+- **Reports** (`reports`). A weekly digest and monthly code and delivery reports, as pages in the web app and, if you add a list, email.
+- **Chat.** Ask *"Where do we check sign-in?"* or *"Why did CI fail on main?"*. It answers from your code, history, issues and Actions runs, and only reads.
+- **Team rules.** Say *"Remember: retries must stop after three attempts."* It drafts a team rule, and an admin approves it before it applies.
 
 Reviews, findings and schedules live in `.hubzoid/`. A restart carries on where it stopped, and each comment is posted once. A review is usually one model call plus a verification call, and daily limits are in `workflows/settings.yaml`. [Setup guide](SETUP.md)
-
-## How work arrives
-
-| You do | The Engineering Desk does |
-|---|---|
-| Ask in the web chat, Slack, or Claude Code over MCP: *"Where do we check sign-in?"*, *"Why did CI fail on main?"* | Answers from your code, history, issues and Actions runs. It only reads. |
-| Turn on `reviews` for a repo | Reviews each new pull request and push against your rules, and tracks which findings get fixed. Preview first: nothing is posted until you allow it. |
-| Comment `/hubzoid review`, `pause`, `resume`, `dismiss`, `defer` or `help` on a pull request | Acts on that pull request (repos with reviews on). |
-| Turn on `security` | Checks dependencies daily against known advisories and audits the code weekly. Alerts only when something new and serious appears. |
-| Turn on `reports` | A weekly digest and monthly code and delivery reports, as pages in the web app and, if you add a list, email. |
-| Say *"Remember: retries must stop after three attempts"* | Drafts a team rule. An admin approves it before it applies. |
-
-Every switch is per repo and off until you turn it on. Chat needs no switch.
 
 ## Quick start
 
@@ -88,25 +77,16 @@ Open the address `hubzoid run` prints. Within two minutes the desk reviews the f
 
 Then ask *"Show the findings on storefront PR 102 with fix prompts."* You see each finding with a prompt you can hand to your own coding assistant to fix it. [Full setup](SETUP.md)
 
-## Connect your own repositories
+## Integrations
 
-1. **Add a GitHub token.** A fine-grained, read-only token goes in `.env`, typed by you, never pasted into chat. [SETUP.md](SETUP.md), step 2, has the command that keeps it off your screen and out of your shell history.
-2. **Choose repos and what runs.** List your repos in `workflows/settings.yaml`, set `source: github`, and turn on what you want per repo:
+| Works with | What the desk does |
+|---|---|
+| GitHub | Reviews pull requests and pushes in the repositories you list. Publishes a comment, inline findings and a status once you turn publishing on. Comment `/hubzoid review`, `pause`, `resume`, `dismiss`, `defer` or `help` on a pull request to act on it. |
+| GitHub's MCP server, read only | Gives chat issues, pull requests, Actions runs and logs, releases and branches, for any repository the token can read. It never writes. |
+| The web chat, and Claude Code over MCP | Answers questions about your code. Its own tools answer signed-in people only. |
+| Email | Sends reports and the weekly digest to a list, if you add one. |
 
-   ```yaml
-   repos:
-     - name: your-org/api
-       reviews: true
-       security: true
-     - name: your-org/web
-       reviews: true
-       reports: true
-     - name: your-org/docs        # chat and a profile only
-   ```
-
-3. **Check and start.** `hubzoid hub doctor .`, then `hubzoid run .`.
-
-Reviews start in preview. When you like them, give the token write access and set `review.post_to_github: true`, and the desk comments on pull requests. A GitHub App gives it its own name. [SETUP.md](SETUP.md), "Publish reviews"
+Ready for your own repositories? Add a fine-grained, read-only GitHub token to `.env` yourself, never in chat ([SETUP.md](SETUP.md), step 2, keeps it off your screen and out of your shell history). List your repositories in `workflows/settings.yaml` with `source: github`, then run `hubzoid hub doctor .` and `hubzoid run .`. Or ask your coding assistant to follow [SETUP.md](SETUP.md).
 
 ## Make it yours
 
@@ -122,6 +102,21 @@ engineering-desk/
 │   └── *.md                      conventions you want chat and reviews to know
 └── connectors/.mcp.json          GitHub's read-only MCP server for chat
 ```
+
+Choose what runs on each repository in `workflows/settings.yaml`:
+
+```yaml
+repos:
+  - name: your-org/api
+    reviews: true
+    security: true
+  - name: your-org/web
+    reviews: true
+    reports: true
+  - name: your-org/docs        # chat and a profile only
+```
+
+Reviews start in preview. When you like them, give the token write access and set `review.post_to_github: true`, and the desk comments on pull requests. A GitHub App gives it its own name. [SETUP.md](SETUP.md), "Publish reviews"
 
 A team rule has a title, the paths it covers, a severity and an optional pattern. Copy one of the examples to start. In a repository, a `.engineering-desk/review.md` file sets what to skip, focus on or ignore there, and the desk also reads the repository's `CLAUDE.md`, `AGENTS.md` and `CONTRIBUTING.md`.
 
