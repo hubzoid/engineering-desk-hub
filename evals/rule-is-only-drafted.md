@@ -1,7 +1,7 @@
 ---
 expect_tools: [propose_rule]
 forbid_tools: [decide_rule]
-tags: [gitzoid]
+tags: [engineering_desk]
 timeout: 180
 ---
 ## Prompt

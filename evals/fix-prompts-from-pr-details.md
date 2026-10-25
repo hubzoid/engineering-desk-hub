@@ -1,10 +1,10 @@
 ---
 expect_tools: [pr_details]
-tags: [gitzoid]
+tags: [engineering_desk]
 timeout: 180
 ---
 ## Prompt
-How do I fix the GitZoid findings on kestrel-oak/storefront PR 101?
+How do I fix the Engineering Desk findings on kestrel-oak/storefront PR 101?
 
 ## Criteria
 Reads pr_details and gives the open findings with their fix prompts, or says

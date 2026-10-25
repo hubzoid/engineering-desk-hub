@@ -1,9 +1,9 @@
-_note: Everything here is fictional sample data for the GitZoid template.
+_note: Everything here is fictional sample data for the Engineering Desk.
 repo: kestrel-oak/storefront
 default_branch: main
 base_dir: storefront
 now: '2026-10-12T09:00:00Z'
-gitzoid_login: gitzoid-bot
+engineering_desk_login: engineering-desk-bot
 people:
   maya:
     permission: admin

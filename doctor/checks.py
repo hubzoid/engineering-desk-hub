@@ -1,4 +1,4 @@
-"""GitZoid's doctor checks: `hubzoid hub doctor .` runs them, and `hubzoid doctor .`
+"""Engineering Desk's doctor checks: `hubzoid hub doctor .` runs them, and `hubzoid doctor .`
 includes them. Each returns one row with what is wrong and the next step, and
 never prints a credential. They only read: no GitHub write, no model call."""
 from __future__ import annotations
@@ -22,8 +22,8 @@ def _row(status: str, summary: str, recovery: str | None = None, details: dict |
 
 
 def _settings(hub_dir: Path):
-    root = hub_dir / "workflows" / "gitzoid" / "lib"
-    name = "gitzoid_doctor_lib"
+    root = hub_dir / "workflows" / "engineering_desk" / "lib"
+    name = "engineering_desk_doctor_lib"
     if name not in sys.modules:
         spec = importlib.util.spec_from_file_location(name, root / "package.py", submodule_search_locations=[str(root)])
         module = importlib.util.module_from_spec(spec)
@@ -44,15 +44,18 @@ def settings(context) -> dict:
     hub_dir = Path(context["hub_dir"])
     lib = _settings(hub_dir)
     try:
-        s, _ = lib.read_file(hub_dir)
+        s, data = lib.read_file(hub_dir)
     except lib.SettingsError as exc:
         return _row("fail", str(exc), "Fix workflows/settings.yaml; SETUP.md lists every key.")
+    if "gitzoid" in data and "engineering_desk" not in data:
+        return _row("fail", "workflows/settings.yaml still has the old gitzoid: block, so nothing it sets is read.",
+                    "Rename gitzoid: to engineering_desk: (UPGRADING.md, \"From GitZoid\").")
     mode = lib.publishing(s)
     if s.legacy:
         return _row("warn", f"Settings without a version: all {len(s.repos)} repos have reviews, security and reports on.",
                     "Add version: 2 and turn on reviews, security or reports per repo (UPGRADING.md).")
     if not s.repos:
-        return _row("info", "GitZoid is not watching any repo yet. Chat can still read what the token can.",
+        return _row("info", "Engineering Desk is not watching any repo yet. Chat can still read what the token can.",
                     "Add repos under repos: in workflows/settings.yaml (SETUP.md, step 3).")
     on = {r.name: [k for k, v in s.switches(r.name).items() if v] for r in s.repos}
     summary = "; ".join(f"{name}: {', '.join(v) or 'chat only'}" for name, v in on.items())
@@ -67,7 +70,7 @@ def schedules(context) -> dict:
 
     if schedules_enabled(_env(hub_dir)):
         return _row("ok", "Schedules are on: sweeps, profiles, the security watch and reports run on their own.")
-    return _row("fail", "Schedules are off: nothing GitZoid schedules will run, though the web app lists times.",
+    return _row("fail", "Schedules are off: nothing Engineering Desk schedules will run, though the web app lists times.",
                 "Add HUBZOID_SCHEDULES=1 to .env (it is in .env.example) and restart hubzoid run.")
 
 
@@ -89,7 +92,7 @@ def github(context) -> dict:
         return _row("info", "A GitHub token is set outside .env, so this check cannot read it.",
                     "Run hubzoid schedule run . setup_check to test each repo with it.")
     if not token:
-        return _row("fail", "No GitHub token: GitZoid and chat cannot read GitHub.",
+        return _row("fail", "No GitHub token: Engineering Desk and chat cannot read GitHub.",
                     "Add GITHUB_TOKEN to .env: a fine-grained, read-only token for your repos. "
                     "SETUP.md, step 2, shows how to add it without it showing on screen.")
     if not s.repos:

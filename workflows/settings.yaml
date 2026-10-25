@@ -1,9 +1,9 @@
-# GitZoid's settings. Yours to edit: updates to this repo never change this
+# Engineering Desk's settings. Yours to edit: updates to this repo never change this
 # file (new options get a default in code and a line in CHANGELOG.md). The next
 # run reads changes, no restart needed. A wrong key or value fails the next run
 # with a message that names it. SETUP.md explains every choice.
 
-gitzoid:
+engineering_desk:
   version: 2                # nothing runs on its own until a repo below turns it on
   # sample: the fictional kestrel-oak/storefront repo, never touches GitHub.
   # github: the repos below, read with the GITHUB_TOKEN secret (or a GitHub App).
@@ -11,15 +11,15 @@ gitzoid:
   # poll: every 2 minutes, no public URL needed. webhook: instant, needs a
   # GitHub webhook (SETUP.md, "Instant reviews").
   trigger: poll
-  # false: GitZoid ignores @gitzoid in pull request comments. Per repo too.
+  # false: Engineering Desk ignores /hubzoid in pull request comments. Per repo too.
   commands: true
   # Context added to every review.
   context: ""
 
-  # The repos GitZoid knows. Chat answers about any of them, and GitZoid makes
+  # The repos Engineering Desk knows. Chat answers about any of them, and Engineering Desk makes
   # each one a short profile (what it is, where sign-in lives). Each switch is
   # off unless set to true:
-  #   reviews   pull request reviews, follow-ups and @gitzoid on pull requests
+  #   reviews   pull request reviews, follow-ups and /hubzoid on pull requests
   #   security  daily dependency watch and weekly deep audit, with alerts
   #   reports   weekly digest and the monthly code and delivery reports
   repos: []
@@ -51,7 +51,7 @@ gitzoid:
     wait_for_profile_minutes: 10  # a new repo's first reviews wait up to this long for its profile
     summary_on_clean: true      # a clean PR still gets the summary comment (what it does, suggestions)
     auto_pause_after: 0         # 0: keep reviewing pushes. A positive limit pauses busy PRs
-    skip_label: gitzoid-skip
+    skip_label: engineering-desk-skip
     status_check: report        # off · report: pending, then success with counts · gate: failure while blocking findings are open
 
   security:
@@ -71,7 +71,7 @@ gitzoid:
     poem: false
 
   reports:
-    people: true               # true: managers with the grant and gitzoid_groups may run people_report
+    people: true               # true: managers with the grant and engineering_desk_groups may run people_report
 
   limits:
     model_calls_per_day: 400

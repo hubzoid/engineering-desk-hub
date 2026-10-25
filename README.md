@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<h1 align="center">GitZoid</h1>
+<h1 align="center">Engineering Desk</h1>
 <h3 align="center">Pull request reviews and answers about your code, on your own Hubzoid.</h3>
 <p align="center">You choose the repos. You choose what runs. Nothing is posted until you say so.</p>
 <p align="center">
@@ -19,20 +19,19 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-0B0B0C" alt="Apache License 2.0"></a>
 </p>
 
-**GitZoid is a sample Hubzoid hub for engineering teams.** It reviews pull
-requests against your team's rules, answers questions about your code in chat,
-watches dependencies for security problems and writes a weekly digest. It runs
-on your machine or your server, with the Claude Code or Codex you already sign
-in to. It is a sample: a complete, working hub to use and adapt, maintained
-alongside Hubzoid's ready-to-use hubs.
+**The Engineering Desk is a ready-to-use Hubzoid hub for engineering teams.**
+It reviews pull requests against your team's rules, answers questions about
+your code in chat, watches dependencies for security problems and writes a
+weekly digest. It runs on your machine or your server, with the Claude Code or
+Codex you already sign in to.
 
 ## How it works for you
 
-| You | GitZoid |
+| You | Engineering Desk |
 |---|---|
 | Ask in chat, Slack, or Claude Code over MCP: "Where do we check sign-in?", "Why did CI fail on main?" | Answers from your code, history, issues and Actions runs. It only reads. |
 | Turn on `reviews` for a repo | Reviews each new pull request and push against your rules, and tracks which findings get fixed. Preview first: nothing is posted until you allow it. |
-| Comment `@gitzoid review`, `pause`, `resume`, `dismiss`, `defer` or `help` on a pull request | Acts on that pull request (repos with reviews on). |
+| Comment `/hubzoid review`, `pause`, `resume`, `dismiss`, `defer` or `help` on a pull request | Acts on that pull request (repos with reviews on). |
 | Turn on `security` | Checks dependencies daily against known advisories and audits the code weekly. Alerts only when something new and serious appears. |
 | Turn on `reports` | A weekly digest and monthly code and delivery reports, as pages in the web app and, if you add a list, email. |
 | Say "Remember: retries must stop after three attempts" | Drafts a team rule. An admin approves it before it applies. |
@@ -45,8 +44,8 @@ You need Python 3.11 or 3.12, Git, and Claude Code or Codex signed in on this
 machine. No API key.
 
 ```bash
-git clone https://github.com/hubzoid/gitzoid-hub gitzoid
-cd gitzoid
+git clone https://github.com/hubzoid/engineering-desk-hub engineering-desk
+cd engineering-desk
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -60,13 +59,13 @@ cp .env.example .env
 `workflows/settings.yaml`, change `source: github` to `source: sample`. Then:
 
 ```bash
-hubzoid grant admin@localhost gitzoid .
+hubzoid grant admin@localhost engineering_desk .
 hubzoid grant admin@localhost wf_delivery_report .
 hubzoid run .
 ```
 
-The two grants let you, the local owner, use GitZoid's chat tools and ask for
-a delivery report. Within two minutes GitZoid reviews the five sample pull
+The two grants let you, the local owner, use the Engineering Desk's chat tools and ask for
+a delivery report. Within two minutes the Engineering Desk reviews the five sample pull
 requests: an endless retry, an unprotected admin export, unsafe SQL, a
 vulnerable package and one clean change. Nothing is posted anywhere. Ask in
 the web chat:
@@ -101,21 +100,19 @@ every detail):
    ```
 
 Reviews start in preview. When you like them, set `post_to_github: true` and
-GitZoid comments on pull requests. Give the token write access first
+the Engineering Desk comments on pull requests. Give the token write access first
 ([SETUP.md](SETUP.md), "Publish reviews").
 
 <details>
 <summary>Prefer to set up with Claude Code or Codex?</summary>
 
-Paste this from the cloned folder:
+Paste this into Claude Code or Codex, from any folder:
 
 ```text
-Set up the GitZoid hub in this folder. Read README.md and SETUP.md and follow
-them. Use a Python 3.12 virtual environment. Do not ask me for my GitHub token
-in chat: show me the command to add it to .env myself. Ask me which repos to
-list and which of reviews, security and reports to turn on for each, then
-write workflows/settings.yaml and show me the diff. Run hubzoid hub doctor .
-and fix what it reports. Keep publishing off.
+Help me set up the Hubzoid Engineering Desk. Clone
+https://github.com/hubzoid/engineering-desk-hub into a folder called
+engineering-desk, cd in, and follow README.md and SETUP.md. Start with the
+fictional sample, and keep publishing to GitHub off until I say so.
 ```
 
 </details>
@@ -124,10 +121,10 @@ and fix what it reports. Keep publishing off.
 
 - **Team rules.** One Markdown file each in `knowledge/review-rules/`, with a
   title, the paths it covers, a severity, and an optional pattern. Copy one of
-  the examples in `knowledge/review-rules/examples/` to start. Or ask GitZoid
+  the examples in `knowledge/review-rules/examples/` to start. Or ask the Engineering Desk
   to draft one, and approve it as an admin.
-- **Repo rules.** A `.gitzoid/review.md` file in a repo sets what to skip,
-  focus on or ignore there. GitZoid also reads the repo's `CLAUDE.md`,
+- **Repo rules.** A `.engineering-desk/review.md` file in a repo sets what to skip,
+  focus on or ignore there. The Engineering Desk also reads the repo's `CLAUDE.md`,
   `AGENTS.md` and `CONTRIBUTING.md`.
 - **Your own notes.** Add Markdown files under `knowledge/` for conventions
   you want chat and reviews to know.
@@ -138,13 +135,14 @@ and fix what it reports. Keep publishing off.
 git pull
 python -m pip install -r requirements.txt
 hubzoid hub doctor .
-hubzoid restart gitzoid
+hubzoid restart engineering-desk
 ```
 
 `.env`, `.hubzoid/`, `workflows/settings.yaml` and your rules are yours:
 updates never change them. If pip upgraded Hubzoid itself, stop `hubzoid run`
-and start it again. [UPGRADING.md](UPGRADING.md) has the details, and the
-move from the GitZoid bundled with Hubzoid 1.3 to 2.0.1.
+and start it again. [UPGRADING.md](UPGRADING.md) has the details, the move
+from the old GitZoid names, and the move from the GitZoid bundled with
+Hubzoid 1.3 to 2.0.1.
 
 ## Under the hood
 
@@ -157,7 +155,7 @@ pull request ─▶ sweep (every 2 min) or webhook ─▶ your rules + repo rule
 - **Your model.** Reviews, profiles and summaries use the model in `.env`. A
   review is usually one call plus a verification call. Daily limits are in
   `workflows/settings.yaml` (`limits`).
-- **Two ways to read GitHub.** Workflows use GitZoid's own GitHub client:
+- **Two ways to read GitHub.** Workflows use the Engineering Desk's own GitHub client:
   paging, rate limits, each comment posted once, and a preview mode that writes
   nothing. Chat also gets GitHub's own MCP server in read-only mode for
   issues, Actions and anything else the token can read.
@@ -166,9 +164,5 @@ pull request ─▶ sweep (every 2 min) or webhook ─▶ your rules + repo rule
 - **Tested.** `python -m pytest` runs over 150 tests on the sample with a
   scripted model, on every push and nightly against the latest Hubzoid 2.x.
 
-Not yet checked against a live deployment by this release: a GitHub App
-installation, publishing to a real repository, webhooks and email delivery.
-Each has automated tests. Try them in preview on a scratch repository first.
-
-GitZoid is Apache-2.0, like Hubzoid. Need help adapting it for your team?
+The Engineering Desk is Apache-2.0, like Hubzoid. Need help adapting it for your team?
 [Build with us](https://hubzoid.com/build-with-us).

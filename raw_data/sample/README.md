@@ -7,7 +7,7 @@ trimmed copies of public records, captured in October 2026.
 - `storefront/`: the default branch.
 - `pulls/<n>-<slug>/`: open pull requests. `pull.yaml` holds the title,
   author and comments; `head/` holds the changed files at the pull request's
-  head. GitZoid computes the diffs.
+  head. Engineering Desk computes the diffs.
 - `sample.yaml`: the repo, people and their GitHub permission, a linked issue
   and about three months of merged pull requests for the digest and reports.
 

@@ -2,10 +2,21 @@
 
 ## 1.0.0 (unreleased)
 
-GitZoid moves out of the Hubzoid SDK into this repo. It needs Hubzoid 2.0.2 or
-later within 2.x. [UPGRADING.md](UPGRADING.md) covers hubs made from the
-bundled template.
+GitZoid moves out of the Hubzoid SDK into this repo and becomes the
+Engineering Desk. It needs Hubzoid 2.0.2 or later within 2.x.
+[UPGRADING.md](UPGRADING.md) covers hubs made from the bundled template and
+the move from the old names.
 
+- **New name.** GitZoid is now the Engineering Desk, in
+  `hubzoid/engineering-desk-hub`. Permissions are `engineering_desk`,
+  `engineering_desk_admin` and `engineering_desk_manager`; the settings block
+  is `engineering_desk:`; workflows live in `workflows/engineering_desk/`; a
+  repo's own rules go in `.engineering-desk/review.md`; the status check is
+  `engineering-desk/review`.
+- **Slash commands.** Pull request commands are `/hubzoid review`, `pause`,
+  `resume`, `dismiss <reason>`, `defer` and `help`, instead of `@gitzoid`.
+  A slash command notifies no GitHub account. Write access is still required,
+  and commands inside quotes and code blocks are still ignored.
 - **You choose what runs.** `workflows/settings.yaml` ships with
   `version: 2` and no repos. Each repo turns on `reviews`, `security` and
   `reports` itself. Nothing runs on its own until one is on, and each
@@ -23,7 +34,7 @@ bundled template.
 - Turning `security` or `reports` on or off never re-reviews pull requests.
 - **Example rules** moved to `knowledge/review-rules/examples/`, on only in
   sample mode.
-- **Status says what is on.** `gitzoid_status`, `setup_check` and
+- **Status says what is on.** `engineering_desk_status`, `setup_check` and
   `hubzoid hub doctor .` show each repo's switches, the source, and whether
   publishing is preview or live (the sample is always preview).
 - **Doctor checks** (`hub.manifest.yaml`): settings, schedules on, and that

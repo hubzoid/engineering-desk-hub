@@ -1,13 +1,13 @@
-# Setting up GitZoid
+# Setting up Engineering Desk
 
 Every step, in order. The [README](README.md) has the short version. Commands
-run from the cloned `gitzoid` folder with its virtual environment active.
+run from the cloned `engineering-desk` folder with its virtual environment active.
 
 ## 1. Install
 
 ```bash
-git clone https://github.com/hubzoid/gitzoid-hub gitzoid
-cd gitzoid
+git clone https://github.com/hubzoid/engineering-desk-hub engineering-desk
+cd engineering-desk
 python3.12 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -19,13 +19,13 @@ cp .env.example .env
 - `MODEL=claude-local` uses the Claude Code signed in on this machine,
   `MODEL=codex-local` the Codex. A provider key works too
   ([Hubzoid's providers guide](https://github.com/hubzoid/hubzoid/blob/main/docs/providers.md)).
-- `HUBZOID_SCHEDULES=1` lets `hubzoid run` run GitZoid's schedules. Without it
+- `HUBZOID_SCHEDULES=1` lets `hubzoid run` run Engineering Desk's schedules. Without it
   nothing runs on its own, and `hubzoid hub doctor .` says so.
 
-## 2. Give GitZoid a GitHub token
+## 2. Give Engineering Desk a GitHub token
 
 Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
-with access to **only the repos you want GitZoid to read**. Chat can read
+with access to **only the repos you want Engineering Desk to read**. Chat can read
 anything the token can, so the token is the real limit.
 
 | For | Repository permissions |
@@ -55,7 +55,7 @@ GITHUB_INSTALLATION_ID=your-numeric-installation-id
 GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
 ```
 
-GitZoid signs short-lived tokens from the key and renews them before they
+Engineering Desk signs short-lived tokens from the key and renews them before they
 expire. App credentials win when both are set. Chat's GitHub tools use
 `GITHUB_TOKEN`, so set a read-only token as well if you want them.
 
@@ -65,7 +65,7 @@ Everything is in `workflows/settings.yaml`. It is yours: updates never change
 it. Set `source: github` and list your repos:
 
 ```yaml
-gitzoid:
+engineering_desk:
   version: 2
   source: github
   repos:
@@ -89,7 +89,7 @@ email_lists:
 
 | Switch | Off by default. When on |
 |---|---|
-| `reviews` | Pull requests are reviewed every 2 minutes (or instantly with a webhook), pushes are re-reviewed, and `@gitzoid` commands work on that repo's pull requests. |
+| `reviews` | Pull requests are reviewed every 2 minutes (or instantly with a webhook), pushes are re-reviewed, and `/hubzoid` commands work on that repo's pull requests. |
 | `security` | A daily dependency check against known advisories (06:00 UTC) and a weekly deep audit of the code (Wednesdays by default, up to 20 minutes a day until it is done). Alerts only for new or worse problems. |
 | `reports` | A weekly digest (Mondays 08:00 UTC) and monthly code and delivery reports (the 1st, 07:00 UTC). |
 
@@ -128,20 +128,20 @@ hubzoid schedule run . setup_check
 ## 5. Run
 
 ```bash
-hubzoid grant admin@localhost gitzoid .
+hubzoid grant admin@localhost engineering_desk .
 hubzoid grant admin@localhost wf_delivery_report .
 hubzoid run .
 ```
 
 Open the address `hubzoid run` prints. Results show in three places:
 
-- **Chat.** "What is GitZoid watching?", "What did GitZoid find on
+- **Chat.** "What is Engineering Desk watching?", "What did Engineering Desk find on
   your-org/web PR 41?"
-- **Settings, Agents, GitZoid, Runs & schedules.** Each workflow's runs, with
+- **Settings, Agents, Engineering Desk, Runs & schedules.** Each workflow's runs, with
   "Run now", pause and resume.
 - **Report pages**, linked from chat and from the runs.
 
-Reviews start in **preview**: each one shows the comment GitZoid would post,
+Reviews start in **preview**: each one shows the comment Engineering Desk would post,
 and nothing is written to GitHub. Existing open pull requests are reviewed in
 batches of five per sweep.
 
@@ -153,29 +153,29 @@ When you like the previews:
 2. In `workflows/settings.yaml`, set `review.post_to_github: true`.
 
 Pull requests already reviewed are published on the next sweep without
-another model call. GitZoid comments as the token's owner. A GitHub App gives
+another model call. Engineering Desk comments as the token's owner. A GitHub App gives
 it its own name.
 
 **Merge gate (optional).** `review.status_check: gate` makes the
-`gitzoid/review` status fail while a blocking finding (open, high, bug or
+`engineering-desk/review` status fail while a blocking finding (open, high, bug or
 security) is open. Make it a required check in branch protection, and keep a
-required human approval too: GitZoid's green status is not an approval. With
+required human approval too: Engineering Desk's green status is not an approval. With
 the gate on, a pull request's own author cannot dismiss or defer a blocking
-finding. The `gitzoid-skip` label stops reviews on a pull request but keeps
+finding. The `engineering-desk-skip` label stops reviews on a pull request but keeps
 its last status, so a label cannot lift the gate.
 
 ## 7. Bring your team
 
 Turn on sign-in and add people ([Hubzoid team setup](https://github.com/hubzoid/hubzoid/blob/main/docs/ADMINISTRATION.md)).
-In **Settings, Agents, GitZoid, Access**, grant:
+In **Settings, Agents, Engineering Desk, Access**, grant:
 
 | Permission | Lets a person |
 |---|---|
-| `use_hub` and `gitzoid` | Chat with GitZoid and use its tools |
+| `use_hub` and `engineering_desk` | Chat with Engineering Desk and use its tools |
 | `wf_code_report`, `wf_delivery_report`, `wf_repo_profiles`, `wf_review_diff` | Run those workflows for themselves |
 | `schedule_reports` | Keep a personal report on a schedule |
-| `gitzoid_admin` | Approve or reject drafted team rules |
-| `gitzoid_manager` and `wf_people_report` | See activity counts for the digest groups in their `gitzoid_groups` attribute. Counts describe activity. They never score people. |
+| `engineering_desk_admin` | Approve or reject drafted team rules |
+| `engineering_desk_manager` and `wf_people_report` | See activity counts for the digest groups in their `engineering_desk_groups` attribute. Counts describe activity. They never score people. |
 
 For a team server, set `HUBZOID_WORKFLOW_USER` to the account scheduled work
 runs as, keep the process running, and keep the folder, `.hubzoid/` included,
@@ -185,11 +185,11 @@ on persistent storage. Back up with `hubzoid backup` before upgrades.
 
 Chat has two sets of tools:
 
-- **GitZoid's own:** code search and file reading on the listed repos, commit
+- **Engineering Desk's own:** code search and file reading on the listed repos, commit
   history, review findings and fix prompts, security results, repo profiles,
   the rules for a file.
 - **GitHub's**, from GitHub's hosted MCP server in read-only mode
-  (`connectors/.mcp.json`): issues, pull requests GitZoid has not reviewed,
+  (`connectors/.mcp.json`): issues, pull requests Engineering Desk has not reviewed,
   Actions runs and logs, releases, branches, and any repo the token can read.
   It never writes.
 
@@ -206,7 +206,7 @@ seconds, on a hub GitHub can reach:
 1. `workflows/settings.yaml`: `trigger: webhook`.
 2. `.env`: `WEBHOOK_SECRET_GITHUB=<a long random string>`.
 3. GitHub, repo or organization settings, Webhooks: payload URL
-   `https://<your hub>/webhooks/gitzoid/github`, content type JSON, the same
+   `https://<your hub>/webhooks/engineering-desk/github`, content type JSON, the same
    secret, events: Pull requests, Issue comments, Pull request review
    comments, Pushes.
 
@@ -215,23 +215,23 @@ A sweep still runs every 30 minutes as a safety net. Until the secret is set,
 
 ## 10. Fix findings with your own coding agent
 
-GitZoid reviews. Your coding agent fixes. GitZoid never commits.
+Engineering Desk reviews. Your coding agent fixes. Engineering Desk never commits.
 
-1. Connect GitZoid to Claude Code or Codex over MCP (the command
+1. Connect Engineering Desk to Claude Code or Codex over MCP (the command
    `hubzoid run` prints) and sign in to `gh`.
-2. Copy `client/skills/gitzoid-fix/` to `~/.claude/skills/` (Claude Code) or
+2. Copy `client/skills/engineering-desk-fix/` to `~/.claude/skills/` (Claude Code) or
    `~/.codex/skills/` (Codex).
-3. Ask: "fix the gitzoid findings on your-org/web#42 until it's clean".
+3. Ask: "fix the Engineering Desk findings on your-org/web#42 until it's clean".
 
 The agent reads the findings, fixes, runs the tests, pushes, waits for
-GitZoid's review of the new commit and repeats, at most three rounds. It never
-dismisses a finding. `client/github-actions/gitzoid-fix.yml` runs the same
-loop in GitHub Actions when someone adds the `gitzoid-fix` label. That one
+Engineering Desk's review of the new commit and repeats, at most three rounds. It never
+dismisses a finding. `client/github-actions/engineering-desk-fix.yml` runs the same
+loop in GitHub Actions when someone adds the `engineering-desk-fix` label. That one
 needs its own model API key in the repo's secrets.
 
 ## 11. Options
 
-All under `gitzoid:` in `workflows/settings.yaml`. The file's comments show
+All under `engineering_desk:` in `workflows/settings.yaml`. The file's comments show
 the defaults.
 
 | Option | Default | Other choices |

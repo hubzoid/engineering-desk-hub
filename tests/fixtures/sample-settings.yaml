@@ -1,10 +1,10 @@
 # The test hubs' settings: the fictional sample with every switch on and named
 # groups, as the bundled template shipped them, plus version 2 switches.
-# Settings for GitZoid's workflows and tools. The next run reads changes; no
+# Settings for Engineering Desk's workflows and tools. The next run reads changes; no
 # restart needed. Every key is optional; the comments show the defaults.
 # A wrong key or value fails the next run with a message that names it.
 
-gitzoid:
+engineering_desk:
   version: 2
   # sample: the bundled fictional repo in raw_data/sample/ (no GitHub token; model access still required).
   # github: the repos below, using a PAT or renewable GitHub App credentials (see README).
@@ -12,7 +12,7 @@ gitzoid:
   # poll: every 2 minutes, no public URL needed. webhook: instant, needs the
   # `webhooks:` block below and a GitHub webhook (README.md, "Instant reviews").
   trigger: poll
-  # false: GitZoid ignores pull request comments (no @gitzoid). Per repo too.
+  # false: Engineering Desk ignores pull request comments (no /hubzoid). Per repo too.
   commands: true
   # Context for every review, as today's "additional context".
   context: ""
@@ -36,7 +36,7 @@ gitzoid:
   digest_groups:
     storefront: {repos: [kestrel-oak/storefront], email_list: storefront-digest, monthly_reports: [code, delivery]}
 
-  owner_list: gitzoid-owner
+  owner_list: engineering-desk-owner
 
   review:
     severity_floor: high        # high by default; medium and low are optional, with high confidence
@@ -51,7 +51,7 @@ gitzoid:
     wait_for_profile_minutes: 0 # tests review at once; test_switches covers the wait       # true: post summary, inline comments and status (see README.md)
     summary_on_clean: true      # a clean PR still gets the summary comment (what it does, suggestions)
     auto_pause_after: 0         # 0: keep reviewing pushes; optional positive limit pauses busy PRs
-    skip_label: gitzoid-skip
+    skip_label: engineering-desk-skip
     status_check: report        # off · report: pending, then success with counts · gate: failure while blocking findings are open
 
   security:
@@ -71,7 +71,7 @@ gitzoid:
     poem: false
 
   reports:
-    people: true               # true: managers with the grant and gitzoid_groups may run people_report
+    people: true               # true: managers with the grant and engineering_desk_groups may run people_report
 
   limits:
     model_calls_per_day: 400
@@ -93,7 +93,7 @@ gitzoid:
 email_lists:
   platform-security: []
   storefront-digest: []
-  gitzoid-owner: []
+  engineering-desk-owner: []
 
 # GitHub's webhook endpoint for trigger: webhook. Always declared, because the
 # github_events workflow needs it to load; it accepts nothing until the hub's

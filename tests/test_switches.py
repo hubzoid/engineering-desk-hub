@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests import gitzoid_harness as h
+from tests import engineering_desk_harness as h
 
 REPO = "kestrel-oak/storefront"
 SHIPPED = h.TEMPLATE / "workflows" / "settings.yaml"
@@ -42,7 +42,7 @@ def run(hub, name, trigger="schedule", **kw):
 
 def test_the_shipped_settings_watch_nothing():
     doc = yaml.safe_load(SHIPPED.read_text())
-    s = load(doc["gitzoid"])
+    s = load(doc["engineering_desk"])
     assert (s.version, s.source, s.repos) == (2, "github", [])
     assert s.review_repos() == s.security_repos() == s.report_repos() == []
     assert s.security_scope() == {} and s.report_groups() == {}
@@ -149,7 +149,7 @@ def test_status_shows_switches_and_mode(hub, monkeypatch):
     switch(hub, reports=True)
     monkeypatch.setenv("HUBZOID_HUB_DIR", str(hub))  # as the hub's bridge sets it for its tools
     with h.as_person():
-        status = json.loads(h.invoke(h.tools(hub)["gitzoid_status"]))
+        status = json.loads(h.invoke(h.tools(hub)["engineering_desk_status"]))
     assert status["repos"][0]["on"] == {"reviews": False, "security": False, "reports": True}
     assert status["publishing"].startswith("preview")
 
@@ -251,3 +251,16 @@ def test_doctor_reads_the_hub_env_over_the_shell(tmp_path, monkeypatch):
     (tmp_path / ".env").write_text("HUBZOID_SCHEDULES=1\n")
     monkeypatch.setenv("HUBZOID_SCHEDULES", "0")
     assert checks._env(tmp_path)["HUBZOID_SCHEDULES"] == "1"
+
+
+def test_doctor_names_the_old_settings_block(tmp_path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("gz_doctor", h.TEMPLATE / "doctor" / "checks.py")
+    checks = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checks)
+    hub_dir = h.make_hub(tmp_path)
+    path = hub_dir / "workflows" / "settings.yaml"
+    path.write_text(path.read_text().replace("engineering_desk:", "gitzoid:", 1))
+    row = checks.settings({"hub_dir": str(hub_dir)})
+    assert row["status"] == "fail" and "gitzoid:" in row["summary"] and "engineering_desk:" in row["recovery"]
