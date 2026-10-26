@@ -9,6 +9,7 @@
 <h3 align="center">Pull request reviews and answers about your code, on your own Hubzoid.</h3>
 <p align="center">You choose the repos. You choose what runs. Nothing is posted until you say so.</p>
 <p align="center">
+  <a href="https://youtu.be/h-3X16a0NAY">Watch the video</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="SETUP.md">Setup guide</a> ·
   <a href="UPGRADING.md">Upgrading</a> ·
@@ -23,7 +24,9 @@
 
 **The Engineering Desk is a ready-to-use Hubzoid hub for engineering teams.** It reviews pull requests against your team's rules, answers questions about your code in chat, watches dependencies for security problems and writes a weekly digest. It runs on your machine or your server, with the Claude Code or Codex you already sign in to.
 
-<!-- Screenshot: a review preview on a sample pull request, with its findings and fix prompts. -->
+<p align="center">
+  <a href="https://youtu.be/h-3X16a0NAY"><img alt="Watch: an AI teammate for your engineering team" src="https://img.youtube.com/vi/h-3X16a0NAY/maxresdefault.jpg" width="640"></a>
+</p>
 
 ## How it works
 
