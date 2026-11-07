@@ -625,3 +625,15 @@ def test_markers_count_only_from_engineering_desk_itself(tmp_path):
     gh = gz.github.GitHub("t", dry_run=False, transport=httpx.MockTransport(handler))
     assert gh.posted_markers("a/b", 7, gz.review.FINDING_PATTERN) == {}
     assert gh.upsert_summary("a/b", 7, "body", None, gz.review.SUMMARY_MARKER) == 99  # a new comment, not mallory's
+
+
+def test_github_not_answering_is_retried_next_sweep_not_a_failed_run(hub, monkeypatch):
+    gz = h.flow(hub).gz  # the instance the sweep uses
+
+    def down(self, repo):
+        raise gz.github.Transient(f"GET /repos/{repo}/pulls: GitHub did not answer (ConnectTimeout)")
+    monkeypatch.setattr(gz.sample.SampleGitHub, "open_pulls", down)
+    out = sweep(hub).value
+    assert out["reviews"] == [] and out["errors"] == [
+        {"repo": REPO, "error": f"Transient: GET /repos/{REPO}/pulls: GitHub did not answer (ConnectTimeout)",
+         "retry": "next sweep"}]

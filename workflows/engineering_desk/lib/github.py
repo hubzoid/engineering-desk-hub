@@ -34,6 +34,20 @@ class RateLimited(GitHubError):
     pass
 
 
+class Transient(GitHubError):
+    """GitHub did not answer, or answered with a server error, after the
+    retries a read gets. Nothing is wrong with the repo: the next sweep tries again."""
+
+
+RETRY_STATUS = (500, 502, 503, 504)
+RETRIES = 3
+
+
+def _error(what: str, r: httpx.Response) -> GitHubError:
+    kind = Transient if r.status_code in RETRY_STATUS else GitHubError
+    return kind(f"{what}: {r.status_code} {r.text[:200]}")
+
+
 def ts(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
 
@@ -188,21 +202,34 @@ class GitHub:
     def now(self) -> datetime:
         return datetime.now(timezone.utc)
 
-    def _send(self, method: str, path: str, **kw) -> httpx.Response:
-        for attempt in range(4):
+    def _send(self, method: str, path: str, *, read: bool | None = None, **kw) -> httpx.Response:
+        """One request. Reads (GET, and GraphQL queries) are retried with backoff
+        when GitHub does not answer or answers with a server error. Writes are
+        not: after a server error or a dropped connection GitHub may already have
+        applied the write, and sending it again could post a review twice. A
+        rate limit or an expired App token is retried for both, because GitHub
+        refused the request without applying it."""
+        read = method == "GET" if read is None else read
+        for attempt in range(RETRIES + 1):
             if self.app_auth:
                 self.client.headers["Authorization"] = "Bearer " + self.app_auth.token()
-            r = self.client.request(method, path, **kw)
+            try:
+                r = self.client.request(method, path, **kw)
+            except httpx.TransportError as exc:  # timeouts, refused or dropped connections
+                if read and attempt < RETRIES:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise Transient(f"{method} {path}: GitHub did not answer ({type(exc).__name__})") from None
             if r.status_code == 401 and self.app_auth and attempt == 0:
                 self.app_auth.expires = 0
                 continue
             if r.status_code in (403, 429) and (r.headers.get("retry-after") or r.headers.get("x-ratelimit-remaining") == "0"):
                 wait = float(r.headers.get("retry-after") or max(0, int(r.headers.get("x-ratelimit-reset", "0")) - time.time()))
-                if wait > 60 or attempt == 3:
+                if wait > 60 or attempt == RETRIES:
                     raise RateLimited(f"GitHub rate limit reached; resets in {int(wait)} s")
                 time.sleep(max(wait, 1))
                 continue
-            if r.status_code in (502, 503, 504) and attempt < 3:
+            if read and r.status_code in RETRY_STATUS and attempt < RETRIES:
                 time.sleep(2 ** attempt)
                 continue
             return r
@@ -213,7 +240,7 @@ class GitHub:
         if r.status_code == 404:
             return None
         if r.status_code >= 400:
-            raise GitHubError(f"GET {path}: {r.status_code} {r.text[:200]}")
+            raise _error(f"GET {path}", r)
         return r.json()
 
     def _pages(self, path: str, limit: int, **params) -> list:
@@ -223,13 +250,16 @@ class GitHub:
             if r.status_code == 404:
                 return out
             if r.status_code >= 400:
-                raise GitHubError(f"GET {path}: {r.status_code} {r.text[:200]}")
+                raise _error(f"GET {path}", r)
             out.extend(r.json())
             url, query = r.links.get("next", {}).get("url"), None
         return out[:limit]
 
     def _graphql(self, query: str, **variables) -> dict:
-        r = self._send("POST", "/graphql", json={"query": query, "variables": variables})
+        # Engineering Desk only sends GraphQL queries (no mutations), so they retry like reads.
+        r = self._send("POST", "/graphql", read=True, json={"query": query, "variables": variables})
+        if r.status_code in RETRY_STATUS:  # before parsing: a gateway error's body is HTML
+            raise _error("GraphQL", r)
         data = r.json() if r.content else {}
         if r.status_code >= 400 or data.get("errors"):
             raise GitHubError(f"GraphQL: {r.status_code} {str(data.get('errors') or r.text)[:300]}")
@@ -242,7 +272,7 @@ class GitHub:
             return fake
         r = self._send(method, path, json=body)
         if r.status_code >= 400:
-            raise GitHubError(f"{method} {path}: {r.status_code} {r.text[:300]}")
+            raise _error(f"{method} {path}", r)
         return r.json() if r.content else {}
 
     # ------------------------------------------------------------------ reads
@@ -412,18 +442,32 @@ class GitHub:
                  "date": c["commit"]["author"]["date"]} for c in rows]
 
     def tarball(self, repo: str, ref: str, max_bytes: int = 300_000_000) -> bytes:
-        if self.app_auth:
-            self.client.headers["Authorization"] = "Bearer " + self.app_auth.token()
-        # GitHub builds the archive on the fly; a large repo can take minutes to start streaming.
-        with self.client.stream("GET", f"/repos/{repo}/tarball/{ref}", timeout=httpx.Timeout(30, read=300)) as r:
-            if r.status_code >= 400:
-                raise GitHubError(f"downloading {repo}@{ref[:7]}: {r.status_code}")
-            data = bytearray()
-            for chunk in r.iter_bytes():
-                data.extend(chunk)
-                if len(data) > max_bytes:
-                    raise GitHubError(f"{repo} is larger than {max_bytes // 1_000_000} MB; not checked out")
-        return bytes(data)
+        """The repo at `ref`, streamed. A dropped download or a server error is
+        retried from the start, like any read."""
+        for attempt in range(RETRIES + 1):
+            if self.app_auth:
+                self.client.headers["Authorization"] = "Bearer " + self.app_auth.token()
+            try:
+                # GitHub builds the archive on the fly; a large repo can take minutes to start streaming.
+                with self.client.stream("GET", f"/repos/{repo}/tarball/{ref}", timeout=httpx.Timeout(30, read=300)) as r:
+                    if r.status_code in RETRY_STATUS and attempt < RETRIES:
+                        time.sleep(2 ** attempt)
+                        continue
+                    if r.status_code >= 400:
+                        kind = Transient if r.status_code in RETRY_STATUS else GitHubError
+                        raise kind(f"downloading {repo}@{ref[:7]}: {r.status_code}")
+                    data = bytearray()
+                    for chunk in r.iter_bytes():
+                        data.extend(chunk)
+                        if len(data) > max_bytes:
+                            raise GitHubError(f"{repo} is larger than {max_bytes // 1_000_000} MB; not checked out")
+                return bytes(data)
+            except httpx.TransportError as exc:
+                if attempt < RETRIES:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise Transient(f"downloading {repo}@{ref[:7]}: GitHub did not answer ({type(exc).__name__})") from None
+        raise Transient(f"downloading {repo}@{ref[:7]}: GitHub kept failing")
 
     # ----------------------------------------------------------------- writes
 
