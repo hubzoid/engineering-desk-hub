@@ -146,13 +146,15 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict],
             except json.JSONDecodeError:
                 notes.append(f"{name}: no SARIF output (exit {proc.returncode})")
                 continue
-            hits = [c for c in parse_sarif(doc, name, root) if (c["path"], c["line"]) in added]
+            hits = [c for c in parse_sarif(doc, name, root, secret=tool == "gitleaks") if (c["path"], c["line"]) in added]
             checks += hits
             notes.append(f"{name}: {len(hits)} result(s) on added lines")
     return checks, notes
 
 
-def parse_sarif(doc: dict, tool: str, root: Path | None = None) -> list[dict]:
+def parse_sarif(doc: dict, tool: str, root: Path | None = None, secret: bool = False) -> list[dict]:
+    """SARIF results as checks. A secret scanner's results are secrets: they
+    become findings, which the second pass then confirms or refutes."""
     out = []
     for run in doc.get("runs") or []:
         for r in run.get("results") or []:
@@ -163,5 +165,46 @@ def parse_sarif(doc: dict, tool: str, root: Path | None = None) -> list[dict]:
                 uri = os.path.relpath(real, root) if real.startswith(str(root)) else uri
             out.append({"tool": tool, "rule": r.get("ruleId") or "", "level": r.get("level") or "warning",
                         "path": uri.removeprefix("./"), "line": (loc.get("region") or {}).get("startLine"),
-                        "secret": False, "message": ((r.get("message") or {}).get("text") or "")[:300]})
+                        "secret": secret, "message": ((r.get("message") or {}).get("text") or "")[:300]})
+    return out
+
+
+class ScanError(RuntimeError):
+    pass
+
+
+def secret_scan(root: Path, gitleaks: str, history: bool = False, timeout: int = 600) -> list[dict]:
+    """Every secret Gitleaks finds in a whole checkout, or with `history` in
+    every commit of a git working copy. The repo's own Gitleaks config and
+    allow markers never apply, as in the pull request preset. Vendored and
+    build folders are left out; tests and fixtures are kept for the second
+    pass to judge."""
+    from .security import SKIP_DIRS
+    with tempfile.TemporaryDirectory(prefix="engineering-desk-") as tmp:
+        control = Path(tmp)
+        (control / "gitleaks.toml").write_text("[extend]\nuseDefault = true\n")
+        (control / "gitleaksignore").write_text("")
+        cmd = [gitleaks, "git" if history else "dir", str(root), "--report-format", "json", "--report-path", "-",
+               "--no-banner", "--exit-code", "0", "--redact", "--config", str(control / "gitleaks.toml"),
+               "--gitleaks-ignore-path", str(control / "gitleaksignore"), "--ignore-gitleaks-allow"]
+        env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TMPDIR")}
+        env.update(HOME=str(control), XDG_CONFIG_HOME=str(control))
+        try:
+            proc = subprocess.run(cmd, cwd=control, env=env, capture_output=True, text=True, timeout=timeout)
+            rows = json.loads(proc.stdout or "[]")
+        except subprocess.TimeoutExpired:
+            raise ScanError(f"Gitleaks took over {timeout} s") from None
+        except json.JSONDecodeError:
+            raise ScanError(f"Gitleaks printed no report (exit {proc.returncode})") from None
+    out, seen = [], set()
+    for r in rows:
+        path = str(r.get("File") or "")
+        if os.path.isabs(path):
+            path = os.path.relpath(os.path.realpath(path), os.path.realpath(root))
+        if path.startswith("..") or any(p in SKIP_DIRS for p in path.split("/")[:-1]):
+            continue
+        hit = (path, r.get("StartLine"), r.get("RuleID") or "secret", (r.get("Commit") or "")[:12])
+        if hit not in seen:
+            seen.add(hit)
+            out.append({"path": hit[0], "line": hit[1], "rule": hit[2], "commit": hit[3]})
     return out

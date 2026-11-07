@@ -218,6 +218,33 @@ def gate(findings: list[dict], paths: set[str]) -> list[dict]:
     return kept
 
 
+def secret_findings(hits: list[dict]) -> list[dict]:
+    """Audit findings from the whole-repo secret scan, before the second pass
+    judges each one. A secret found in an older commit stays in the history
+    after it is deleted, so the finding names the commit."""
+    out = []
+    for h in hits:
+        where = f" in commit {h['commit'][:7]}" if h.get("commit") else ""
+        out.append({"path": h["path"], "line": h["line"], "kind": "secret", "severity": "high", "confidence": "high",
+                    "body": f"A secret ({h['rule']}) is committed here{where}. Rotate it, then load it from the "
+                            "environment or a secret store" + (", and remove it from the history." if where else "."),
+                    "evidence": f"Gitleaks rule {h['rule']} at line {h['line']}{where}"})
+    return out
+
+
+def windows_around(root: Path, findings: list[dict], radius: int = 15) -> list[list]:
+    """The lines around each finding, for the second pass: [path, text, offset]."""
+    out = []
+    for f in findings:
+        source = Path(root) / f["path"]
+        if not source.is_file():
+            continue
+        lines = source.read_text(errors="replace").splitlines(keepends=True)
+        start = max(0, (f.get("line") or 1) - 1 - radius)
+        out.append([f["path"], "".join(lines[start:start + 2 * radius + 1])[:BATCH_CHARS // 4], start])
+    return out
+
+
 def key(repo: str, f: dict) -> str:
     basis = " ".join((f.get("evidence") or f.get("body") or "").split()).lower()[:200]
     return f"audit:{repo}:{f['path']}:{hashlib.sha1((f['kind'] + basis).encode()).hexdigest()[:10]}"

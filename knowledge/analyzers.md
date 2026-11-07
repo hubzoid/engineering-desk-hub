@@ -25,7 +25,11 @@ OSV.dev supplies their advisories, and Trivy's own database those for
 CocoaPods, which OSV.dev does not cover.
 
 Results on added lines are evidence for the reviewer; they do not become findings
-by themselves. Missing tools and custom commands without opt-in are skipped with
+by themselves. Gitleaks results are the exception: a secret is a finding, and
+the second pass confirms or refutes it (a test fixture's fake key is dropped,
+with the reason under Run details). The deep audit also runs Gitleaks over the
+whole default branch on each weekly audit, and its second pass checks every
+hit before anyone is alerted. Missing tools and custom commands without opt-in are skipped with
 a note in the summary's run details. The other tools below are custom-command
 options, not supplied isolated presets.
 

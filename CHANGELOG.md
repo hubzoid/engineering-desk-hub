@@ -79,3 +79,11 @@ the move from the old names.
   gets them from Trivy's database, downloaded only for repos that have a
   `Podfile.lock`. Without Trivy the Desk's own readers run, and any other
   dependency file is reported as not checked.
+- **Secrets are double-checked.** A secret the pattern sweep or Gitleaks
+  finds in a pull request is a finding that now goes through the second
+  pass, like the model's own: a fake key in a test fixture is dropped with
+  the reason under Run details, and a real one is kept. Dependency
+  advisories and team-rule patterns are still not second-guessed.
+- **Weekly secret scan.** Each full deep audit runs Gitleaks over the whole
+  default branch. The audit's second pass checks every hit before anyone is
+  alerted. A scan that could not run is a coverage problem.

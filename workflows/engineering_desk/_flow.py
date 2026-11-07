@@ -238,8 +238,11 @@ def prepare(repo: str, number: int, force: bool = False) -> dict:
     analyzer_hits, notes = gz.checks.run_analyzers(review_files, lambda p: gh.file(repo, p, head),
                                                    [a.model_dump() for a in settings.analyzers],
                                                    download=settings.source != "sample")
+    # Secrets from the pattern sweep and from Gitleaks are findings; the second pass confirms or refutes each.
+    secrets = [c for c in sweep + analyzer_hits if c["secret"]]
+    analyzer_hits = [c for c in analyzer_hits if not c["secret"]]
     code_findings = [{**f, "checked": True} for f in
-                     gz.checks.secret_findings(sweep) + gz.rules.code_checks(rules_now, review_files)]
+                     gz.checks.secret_findings(secrets) + gz.rules.code_checks(rules_now, review_files)]
     own = gh.login()
     talk = [{"author": c["author"], "body": c["body"][:400]} for c in gh.discussion(repo, number)
             if c["author_type"] != "Bot" and "<!-- engineering-desk:" not in c["body"]][-30:]
