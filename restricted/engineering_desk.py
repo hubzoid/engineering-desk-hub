@@ -98,7 +98,7 @@ def find_code(query: str, repo: str = "") -> str:
     gh = _gh(settings, store)
     hits = []
     for name in repos[:20]:
-        root, _ = gz.checkout.ensure(gh, name, hubzoid.data_dir())
+        root, _ = gz.checkout.ensure(gh, name, hubzoid.data_dir(HUB_DIR))
         hits += [f"{name}: {h}" for h in gz.checkout.grep(root, query, limit=40 - len(hits))]
         if len(hits) >= 40:
             break
@@ -112,7 +112,7 @@ def read_code(repo: str, path: str, start_line: int = 1, end_line: int = 0) -> s
     import hubzoid
     user, settings, store = _ctx()
     name = _repo(settings, repo)
-    root, _ = gz.checkout.ensure(_gh(settings, store), name, hubzoid.data_dir())
+    root, _ = gz.checkout.ensure(_gh(settings, store), name, hubzoid.data_dir(HUB_DIR))
     return gz.checkout.read(root, path, start_line, end_line or None)
 
 
@@ -189,7 +189,7 @@ def security(query: str = "", repo: str = "") -> str:
     installed = []
     if q and not q.startswith(("cve-", "ghsa-", "pysec-")):
         for name in repos[:20]:
-            root = gz.checkout.path_for(hubzoid.data_dir(), name)
+            root = gz.checkout.path_for(hubzoid.data_dir(HUB_DIR), name)
             if root.is_dir():
                 deps, _ = gz.security.dependencies(gz.security.manifest_files(root)[0])
                 installed += [f"{name}: {d['name']} {d['version']} ({d['file']})" for d in deps if q in d["name"].lower()]
