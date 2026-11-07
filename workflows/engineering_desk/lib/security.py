@@ -27,8 +27,12 @@ from .untrusted import fence
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
 OSV_VULN = "https://api.osv.dev/v1/vulns/"
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+# Folders of other people's code or of build output, never read: vendored
+# dependencies (npm, Composer, CocoaPods, Carthage, Bower), virtual environments,
+# and what a build writes (Xcode, SwiftPM, Gradle, Dart, Next and Nuxt).
 SKIP_DIRS = {"node_modules", "vendor", ".git", "venv", ".venv", "dist", "build", "__pycache__", "site-packages",
-             ".tox", "target", "third_party"}
+             ".tox", "target", "third_party", "Pods", "Carthage", "bower_components", "DerivedData", ".build",
+             ".swiftpm", ".gradle", ".dart_tool", ".next", ".nuxt", ".svelte-kit", ".terraform"}
 RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 1}
 PYPI_MODULE = {"pyyaml": "yaml", "beautifulsoup4": "bs4", "pillow": "PIL", "python-dateutil": "dateutil",
                "scikit-learn": "sklearn", "opencv-python": "cv2", "pyjwt": "jwt", "python-dotenv": "dotenv",

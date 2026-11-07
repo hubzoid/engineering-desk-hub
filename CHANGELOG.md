@@ -57,3 +57,12 @@ the move from the old names.
 - Chat tools name their hub folder, so they work in evals and over MCP, and
   the three evals run as `admin@localhost`.
 - The Desk no longer imports a private part of Hubzoid (`_file_lock`).
+- **Every language.** The deep audit, repo profiles and code search read
+  every text file, whatever its language (Swift, Objective-C, Kotlin, Dart,
+  C and C++ included), instead of a fixed list. They skip vendored and
+  build folders (now also `Pods/`, `Carthage/`, `.build/`, `DerivedData/`,
+  `.gradle/` and others), binary files, and for the audit lockfiles,
+  documentation, data and generated Xcode files.
+- **"Not checked", never "0 issues".** A repo where the audit can read no
+  file is reported as not checked, and is never recorded as a clean audit.
+  The security watch says the same for a repo with no dependency file.

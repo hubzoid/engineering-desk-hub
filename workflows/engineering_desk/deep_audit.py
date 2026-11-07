@@ -76,13 +76,20 @@ def audit_prepare(repo: str, queued_only: bool) -> dict:
     queued = state["queued"]
     skipped: list[str] = []
     files = gz.audit.select(root, profile, queued, [], 1_000_000, exclude=settings.exclude_for(repo), skipped=skipped)
+    if not files and not queued_only:
+        # Nothing read is "not checked", never "no findings".
+        why = (f"all {len(skipped)} files are generated, minified or excluded" if skipped
+               else "no text file outside tests, samples and vendored folders")
+        problem = f"not checked: {why}"
+        store.coverage_error(repo, "audit", problem)
+        return {"error": problem, "not_checked": True}
     if queued_only:
         files = [f for f in files if f in queued]
     scan_notes = []
     excluded = root / ".engineering-desk-excluded.json"
     if excluded.exists():
         import json
-        missing = [r["path"] for r in json.loads(excluded.read_text()) if gz.audit.CODE.search(r["path"])]
+        missing = [r["path"] for r in json.loads(excluded.read_text()) if gz.audit.auditable(r["path"])]
         if missing:
             scan_notes.append(f"{len(missing)} source files unavailable in checkout (oversize or links): " + ", ".join(missing[:10]))
     if sum(1 for _ in gz.checkout.text_files(root)) >= 20000:

@@ -276,7 +276,7 @@ def prepare(repo: str, number: int, force: bool = False) -> dict:
         job["notes"].append("CI " + job["ci"])
     store.save_review(repo, number, **meta, state="reviewing", pushes=pushes)
     if gz.audit.SENSITIVE.search(" ".join(reviewed_paths)):
-        store.queue_audit(repo, [p for p in reviewed_paths if gz.audit.SENSITIVE.search(p) and gz.audit.CODE.search(p)])
+        store.queue_audit(repo, [p for p in reviewed_paths if gz.audit.SENSITIVE.search(p) and gz.audit.auditable(p)])
     return {"job": job, "all_ignored": not keep}
 
 
@@ -616,7 +616,7 @@ def on_push(repo: str, changed: list[dict]) -> dict:
         store.mark_profile_stale(repo, reason)
         out["profile"] = reason
     paths = [c["filename"] for c in changed if c.get("status") != "removed"
-             and gz.audit.SENSITIVE.search(c["filename"]) and gz.audit.CODE.search(c["filename"])]
+             and gz.audit.SENSITIVE.search(c["filename"]) and gz.audit.auditable(c["filename"])]
     store.queue_audit(repo, paths)
     out["audit_queued"] = len(paths)
     watched = set(gz.rules.REVIEW_MD) | set(gz.rules.CONVENTIONS) | set(gz.rules.EXTRA_CONVENTIONS)

@@ -166,7 +166,9 @@ def security_watch():
             c = security_record(repo, items, ignored, p["stamp"], not s["notes"], s["complete"], s.get("skipped", []))
             for k in changes:
                 changes[k] += [{**x, "repo": repo} for x in c[k]]
-            summary.append({"repo": repo, "dependencies": s["deps"], "advisories": len(items),
+            # No dependency file read is "not checked", never "0 advisories".
+            summary.append({"repo": repo, "dependencies": s["deps"] or "not checked: no dependency file found",
+                            "advisories": len(items),
                             "new": len(c["new"]), "worse": len(c["escalated"]), "resolved": len(c["resolved"]),
                             "unused_dropped": s["unused"], "notes": s["notes"]})
         view = security_group_view(g["repos"])

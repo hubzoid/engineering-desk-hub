@@ -15,7 +15,8 @@ from .checkout import text_files
 from .untrusted import fence
 
 MANIFESTS = ("package.json", "pyproject.toml", "requirements.txt", "go.mod", "Cargo.toml", "Gemfile",
-             "composer.json", "pom.xml", "build.gradle", "Dockerfile", "docker-compose.yml", "setup.py")
+             "composer.json", "pom.xml", "build.gradle", "build.gradle.kts", "Dockerfile", "docker-compose.yml",
+             "setup.py", "Package.swift", "Podfile", "Cartfile", "pubspec.yaml", "mix.exs", "CMakeLists.txt")
 ROUTES = [
     re.compile(r"""@\w+\.(route|get|post|put|delete|patch)\(\s*['"]([^'"]+)"""),
     re.compile(r"""\b(?:app|router|api)\.(get|post|put|delete|patch|all)\(\s*['"]([^'"]+)"""),
@@ -26,7 +27,10 @@ AUTH_PATH = re.compile(r"(?i)(auth|login|logout|session|permission|rbac|acl|jwt|
 AUTH_CODE = re.compile(r"(?i)(login_required|requires_auth|authenticate|authorize|permission_required|@auth|"
                        r"isAuthenticated|passport\.|jwt\.(?:decode|verify)|check_permission|current_user)")
 EXTS = {".py": "Python", ".js": "JavaScript", ".jsx": "JavaScript", ".ts": "TypeScript", ".tsx": "TypeScript",
-        ".go": "Go", ".rb": "Ruby", ".php": "PHP", ".java": "Java", ".kt": "Kotlin", ".rs": "Rust", ".cs": "C#"}
+        ".go": "Go", ".rb": "Ruby", ".php": "PHP", ".java": "Java", ".kt": "Kotlin", ".kts": "Kotlin", ".rs": "Rust",
+        ".cs": "C#", ".swift": "Swift", ".m": "Objective-C", ".mm": "Objective-C", ".h": "C/C++ headers",
+        ".c": "C", ".cc": "C++", ".cpp": "C++", ".hpp": "C++", ".dart": "Dart", ".scala": "Scala",
+        ".ex": "Elixir", ".exs": "Elixir", ".vue": "Vue", ".svelte": "Svelte", ".sh": "Shell", ".lua": "Lua"}
 
 
 def facts(root: Path) -> dict:
@@ -40,7 +44,8 @@ def facts(root: Path) -> dict:
         name = rel.rsplit("/", 1)[-1]
         if name in MANIFESTS and rel.count("/") <= 2:
             manifests.append(rel)
-        if name in ("main.py", "app.py", "manage.py", "wsgi.py", "server.js", "index.js", "main.go", "main.ts"):
+        if name in ("main.py", "app.py", "manage.py", "wsgi.py", "server.js", "index.js", "main.go", "main.ts",
+                    "main.swift", "AppDelegate.swift", "SceneDelegate.swift", "main.dart", "MainActivity.kt"):
             entry.append(rel)
         if ext not in EXTS or "test" in rel.lower():
             continue

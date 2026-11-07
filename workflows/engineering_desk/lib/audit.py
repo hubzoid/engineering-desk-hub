@@ -21,7 +21,23 @@ from .untrusted import fence
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 SENSITIVE = re.compile(r"(?i)(auth|login|session|permission|admin|role|acl|rbac|payment|billing|invoice|secret|token|"
                        r"crypto|password|upload|export|webhook|exec|eval|serial|pickle|sql|query|middleware|guard|api)")
-CODE = re.compile(r"\.(py|js|jsx|ts|tsx|mjs|cjs|go|rb|php|java|kt|rs|cs)$")
+# The audit reads every text file the checkout lists, in any language, except
+# these: lockfiles (the security watch reads those), documentation, data, and
+# files a tool generates (Xcode projects and interface files, localisations,
+# snapshots, source maps).
+NOT_AUDITED = re.compile(
+    r"(?i)(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|npm-shrinkwrap\.json|go\.sum|Podfile\.lock|"
+    r"Package\.resolved|Cartfile\.resolved|composer\.lock|Gemfile\.lock|Cargo\.lock|poetry\.lock|uv\.lock|"
+    r"Pipfile\.lock|pubspec\.lock|mix\.lock|packages\.lock\.json|gradle\.lockfile|LICEN[CS]E[^/]*|"
+    r"CHANGELOG[^/]*|AUTHORS[^/]*|NOTICE[^/]*)$|"
+    r"\.(lock|md|markdown|mdx|rst|txt|adoc|csv|tsv|log|svg|map|snap|pbxproj|xcworkspacedata|xcscheme|"
+    r"storyboard|xib|strings|stringsdict|xcstrings|po|pot|mo|ipynb)$")
+
+
+def auditable(rel: str) -> bool:
+    """A file the audit reads, when it is a text file: any language, never a
+    lockfile, documentation or data."""
+    return not NOT_AUDITED.search(rel)
 BATCH_CHARS = 40_000
 KINDS = ("authorization", "secret", "backdoor", "injection", "other")
 NEARBY = 20  # outside any function, an open finding of the same kind this close is the same finding
@@ -79,7 +95,7 @@ def select(root: Path, profile: dict | None, queued: list[str], done: list[str],
     ranked: list[str] = []
     candidates = []
     for rel, path in text_files(root):
-        if not CODE.search(rel) or NOT_SOURCE.search(rel):
+        if not auditable(rel) or NOT_SOURCE.search(rel):
             continue
         if any(match_glob(rel, g) for g in exclude) or generated(path):
             if skipped is not None:

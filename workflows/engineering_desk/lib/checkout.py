@@ -13,8 +13,14 @@ from pathlib import Path, PurePosixPath
 from .security import SKIP_DIRS
 
 MAX_FILE = 2_000_000
-TEXT_EXTS = re.compile(r"\.(py|js|jsx|ts|tsx|mjs|cjs|go|rb|php|java|kt|rs|cs|swift|scala|vue|svelte|sql|sh|"
-                       r"yaml|yml|toml|json|md|txt|cfg|ini|html|css|tf)$|(^|/)(Dockerfile|Makefile|Gemfile)$")
+# Every text file is read, whatever its language. These are never text: images,
+# fonts, media, archives, compiled code and documents. Anything else with a NUL
+# byte near its start is binary too.
+BINARY = re.compile(r"(?i)\.(png|jpe?g|gif|bmp|tiff?|webp|ico|icns|heic|psd|ai|sketch|fig|"
+                    r"woff2?|ttf|otf|eot|mp[34]|m4a|wav|aac|ogg|flac|mov|avi|mkv|webm|"
+                    r"zip|gz|tgz|bz2|xz|7z|rar|tar|jar|war|aar|ipa|apk|aab|dmg|pkg|deb|rpm|"
+                    r"so|dylib|dll|exe|a|o|lib|class|pyc|pyo|wasm|bin|dat|db|sqlite3?|"
+                    r"pdf|docx?|xlsx?|pptx?|keynote|numbers|pages|car|nib|mobileprovision|p12|pfx|der|keystore|jks)$")
 
 
 def slug(repo: str) -> str:
@@ -116,6 +122,14 @@ def _extract(data: bytes, target: Path) -> None:
         (target / ".engineering-desk-excluded.json").write_text(json.dumps(excluded))
 
 
+def _binary(path: Path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return b"\0" in f.read(8192)
+    except OSError:
+        return True
+
+
 def text_files(root: Path, limit: int = 20000):
     root = Path(root)
     n = 0
@@ -123,7 +137,7 @@ def text_files(root: Path, limit: int = 20000):
         rel = path.relative_to(root).as_posix()
         if not path.is_file() or any(p in SKIP_DIRS for p in rel.split("/")[:-1]) or rel.startswith(".engineering-desk"):
             continue
-        if not TEXT_EXTS.search(rel) or path.stat().st_size > MAX_FILE:
+        if BINARY.search(rel) or path.stat().st_size > MAX_FILE or _binary(path):
             continue
         yield rel, path
         n += 1
