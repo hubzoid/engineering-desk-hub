@@ -39,8 +39,11 @@ class Finding(BaseModel):
     category: Category
     body: str = Field(description="One or two plain sentences: the problem and what it breaks. No praise")
     rule: str = Field("", description="The team rule, repo instruction or check this rests on, if any")
-    suggestion: str = Field("", description="Only when the fix is a small mechanical change to this one line: "
-                            "the corrected line exactly as it should read, with its indentation. Otherwise empty")
+    start_line: int | None = Field(None, description="Only with a suggestion that replaces several lines: the first "
+                                   "new-file line it replaces (`line` is the last, at most 15 lines). Otherwise null")
+    suggestion: str = Field("", description="Only when the fix is a small mechanical change to this line (or to the "
+                            "lines from start_line to line): the corrected code exactly as it should read, with its "
+                            "indentation. Otherwise empty")
 
 
 class Review(BaseModel):

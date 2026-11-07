@@ -81,6 +81,10 @@ MIGRATIONS = [
     """
     ALTER TABLE findings ADD COLUMN suggestion TEXT;
     """,
+    # 4: a suggestion can replace several lines, start_line to line.
+    """
+    ALTER TABLE findings ADD COLUMN start_line INTEGER;
+    """,
 ]
 
 
@@ -206,7 +210,7 @@ class Store:
                      by_user: str | None = None, reason: str | None = None) -> None:
         stamp = now_iso()
         fields = {k: f.get(k) for k in ("repo", "number", "path", "line", "function", "anchor", "category",
-                                         "rule", "severity", "confidence", "body", "suggestion", "state", "reason",
+                                         "rule", "severity", "confidence", "body", "suggestion", "start_line", "state", "reason",
                                          "by_user", "first_sha", "last_sha", "comment_id", "created_at")}
         fields["created_at"] = fields["created_at"] or stamp
         self._upsert("findings", {"id": f["id"]}, {**fields, "updated_at": stamp})

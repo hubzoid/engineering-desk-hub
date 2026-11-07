@@ -362,6 +362,18 @@ def finalize(job: dict, kept: list[dict], review: dict, dropped: list[dict]) -> 
     return {"view": view, "post": to_post}
 
 
+def comment(f: dict, lines: set, pr: dict, commands: bool) -> dict:
+    """One inline comment. A several-line suggestion keeps its range only while
+    every line of it can still be commented on; otherwise the comment sits on
+    `line` alone, without the suggestion."""
+    if f.get("start_line") and not gz.review.spans(f, lines):
+        f = {**f, "start_line": None}
+    out = {"path": f["path"], "line": f["line"], "body": gz.review.inline_body(f, pr, commands)}
+    if f.get("start_line"):
+        out["start_line"] = f["start_line"]
+    return out
+
+
 def build_view(store, job: dict, summary_text: str, suggestions: list[str], fixed: list[dict],
                dropped: list[dict], paused: str | None = None) -> dict:
     rows = store.findings_for(job["repo"], job["number"])
@@ -409,8 +421,7 @@ def post(view: dict, post_ids: list[str], commentable: list) -> dict:
     posted = []
     if todo:
         created = gh.post_review(repo, number, head,
-                                 [{"path": f["path"], "line": f["line"], "body": gz.review.inline_body(f, pr, view["commands"])}
-                                  for f in todo],
+                                 [comment(f, lines, pr, view["commands"]) for f in todo],
                                  gz.review.review_body(len(todo)))
         by_marker = {m: c["id"] for c in created for m in re.findall(gz.review.FINDING_PATTERN, c.get("body") or "")}
         for f, c in zip(todo, created):

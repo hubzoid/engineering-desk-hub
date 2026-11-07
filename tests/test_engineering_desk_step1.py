@@ -121,6 +121,83 @@ def test_errors_say_whether_the_next_sweep_should_retry():
     assert issubclass(gz.github.Transient, gz.github.GitHubError)  # chat tools still relay it as a sentence
 
 
+# ---------------------------------------------------- several-line suggestions
+
+LINES = {("app/sync.py", n) for n in range(10, 20)}
+
+
+def _finding(**kw):
+    return {"path": "app/sync.py", "line": 14, "severity": "high", "confidence": "high", "category": "bug",
+            "body": "The retry never stops.", **kw}
+
+
+def test_a_range_inside_the_diff_is_kept():
+    [f] = gz.review.gate([_finding(start_line=12)], LINES, "high", 8)
+    assert f["start_line"] == 12 and gz.review.spans(f, LINES)
+
+
+@pytest.mark.parametrize("start, why", [
+    (5, "starts outside the diff"),
+    (14, "not before line"),
+    (-1, "not a line"),
+    ("12", "not a number"),
+])
+def test_a_range_github_cannot_take_becomes_one_line(start, why):
+    [f] = gz.review.gate([_finding(start_line=start)], LINES, "high", 8)
+    assert f["start_line"] is None, why
+
+
+def test_a_range_is_at_most_fifteen_lines():
+    lines = {("app/sync.py", n) for n in range(1, 40)}
+    assert gz.review.gate([_finding(line=30, start_line=16)], lines, "high", 8)[0]["start_line"] == 16
+    assert gz.review.gate([_finding(line=30, start_line=15)], lines, "high", 8)[0]["start_line"] is None
+
+
+def test_a_range_with_a_gap_in_the_diff_becomes_one_line():
+    gap = LINES - {("app/sync.py", 13)}
+    [f] = gz.review.gate([_finding(start_line=12)], gap, "high", 8)
+    assert f["start_line"] is None
+
+
+def test_several_lines_are_suggested_only_with_a_range():
+    pr = {"repo": "o/r", "number": 7}
+    f = {**_finding(), "id": "0123456789abcdef", "suggestion": "for attempt in range(3):\n    sync()"}
+    assert "```suggestion\nfor attempt in range(3):\n    sync()\n```" in gz.review.inline_body({**f, "start_line": 13}, pr, True)
+    assert "```suggestion" not in gz.review.inline_body(f, pr, True)  # several lines over one would add lines
+    long = "x = 1\n" * 400  # 2,400 characters, over the 2,000 a range may suggest
+    assert "```suggestion" not in gz.review.inline_body({**f, "start_line": 13, "suggestion": long}, pr, True)
+
+
+def test_github_receives_the_range():
+    sent = []
+
+    def handler(request):
+        if request.method == "POST":
+            sent.append(json.loads(request.content))
+            return httpx.Response(200, json={"id": 9})
+        return httpx.Response(200, json=[])
+
+    gh = _client(handler, dry_run=False)
+    gh.post_review("a/b", 7, "abc", [{"path": "app/sync.py", "line": 14, "start_line": 12, "body": "b"},
+                                     {"path": "app/sync.py", "line": 18, "body": "c"}], "r")
+    ranged, single = sent[0]["comments"]
+    assert ranged["start_line"] == 12 and ranged["start_side"] == "RIGHT" and ranged["line"] == 14
+    assert "start_line" not in single and "start_side" not in single
+
+
+def test_the_range_moves_with_the_finding():
+    assert gz.lifecycle.moved({"line": 14, "start_line": 12}, 20) == 18
+    assert gz.lifecycle.moved({"line": 14}, 20) is None
+    assert gz.lifecycle.moved({"line": 14, "start_line": 12}, None) is None
+
+
+def test_the_range_is_stored_with_the_finding(tmp_path):
+    store = gz.store.Store(tmp_path)
+    store.save_finding({"id": "f1", "repo": "a/b", "number": 7, "path": "app/sync.py", "line": 14,
+                        "start_line": 12, "state": "open"})
+    assert store.finding("f1")["start_line"] == 12
+
+
 # ----------------------------------------------------- no private Hubzoid parts
 
 def test_the_desk_imports_no_private_part_of_hubzoid():

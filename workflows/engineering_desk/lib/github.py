@@ -500,7 +500,9 @@ class GitHub:
     def post_review(self, repo: str, number: int, sha: str, comments: list[dict], body: str) -> list[dict]:
         review = self._write("POST", f"/repos/{repo}/pulls/{number}/reviews",
                              {"commit_id": sha, "event": "COMMENT", "body": body,
-                              "comments": [{"path": c["path"], "line": c["line"], "side": "RIGHT", "body": c["body"]}
+                              "comments": [{"path": c["path"], "line": c["line"], "side": "RIGHT", "body": c["body"],
+                                            **({"start_line": c["start_line"], "start_side": "RIGHT"}
+                                               if c.get("start_line") else {})}
                                            for c in comments]}, f"post {len(comments)} inline comment(s)")
         if self.dry_run:
             return [{"path": c["path"], "line": c["line"], "id": None} for c in comments]

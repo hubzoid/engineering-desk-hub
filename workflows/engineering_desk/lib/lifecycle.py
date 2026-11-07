@@ -72,7 +72,8 @@ def reconcile(repo: str, number: int, sha: str, prior: list[dict], found: list[d
             out["new"].append({**f, "repo": repo, "number": number, "state": "open", "first_sha": sha, "last_sha": sha})
             continue
         taken.add(p["id"])
-        merged = {**p, "line": f.get("line"), "anchor": f.get("anchor") or p.get("anchor"),
+        merged = {**p, "line": f.get("line"), "start_line": moved(p, f.get("line")),
+                  "anchor": f.get("anchor") or p.get("anchor"),
                   "severity": f.get("severity", p.get("severity")), "body": p.get("body") or f.get("body"),
                   "last_sha": sha}
         if p["state"] in SUPPRESSED:
@@ -100,8 +101,15 @@ def reconcile(repo: str, number: int, sha: str, prior: list[dict], found: list[d
         elif line is None:
             out["still"].append({**p, "last_sha": sha, "reason": "Code changed; resolution not confirmed"})
         else:
-            out["still"].append({**p, "line": line, "last_sha": sha})
+            out["still"].append({**p, "line": line, "start_line": moved(p, line), "last_sha": sha})
     return out
+
+
+def moved(p: dict, line: int | None) -> int | None:
+    """A several-line suggestion's first line, moved with the finding's line."""
+    if not p.get("start_line") or not p.get("line") or not line:
+        return None
+    return p["start_line"] + (line - p["line"])
 
 
 def blocking(f: dict) -> bool:
