@@ -45,3 +45,4 @@ the move from the old names.
   `workflows/settings.yaml`.
 - Messages say Settings instead of Console.
 - Tests and CI live here, on Hubzoid 2.0.3 and the latest 2.x.
+- The Desk no longer imports a private part of Hubzoid (`_file_lock`).
