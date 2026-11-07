@@ -68,7 +68,7 @@ def configuration_version(settings, repo: str, repo_controls: dict, hub_rules: l
     # turning reports on must not re-review every pull request, and hubs from
     # before these settings keep exactly the same fingerprint.
     return gz.rules.fingerprint(repo_controls, hub_rules, guide, settings.review.model_dump(exclude={"wait_for_profile_minutes"}),
-                                settings.repo(repo).model_dump(exclude={"reviews", "security", "reports"}), settings.context,
+                                settings.repo(repo).model_dump(exclude={"reviews", "security", "reports", "path"}), settings.context,
                                 [a.model_dump() for a in settings.analyzers], settings.commands, gz.profiles.content(profile), hub.secret("MODEL", ""))
 
 

@@ -80,7 +80,7 @@ def engineering_desk_status(repo: str = "") -> str:
             "checks_not_running": [f"{c['check_name']}: {c['last_error']}" for c in problems],
             "profile": "missing" if not prof else ("stale: " + (prof["stale_reason"] or "") if prof["stale"] else "fresh"),
         })
-    return json.dumps({"source": "fictional sample repo" if settings.source == "sample" else "GitHub",
+    return json.dumps({"source": {"sample": "fictional sample repo", "local": "local folders"}.get(settings.source, "GitHub"),
                        "publishing": gz.settings.publishing(settings) + (": nothing is written to GitHub"
                                                                        if gz.settings.publishing(settings) == "preview" else ""),
                        "repos": out or "Engineering Desk is not watching any repo yet. Add repos in workflows/settings.yaml."},

@@ -103,6 +103,8 @@ def github(context) -> dict:
         return _row("info", "Skipped until workflows/settings.yaml is valid.")
     if s.source == "sample":
         return _row("info", "Sample mode: no GitHub access is needed.")
+    if s.source == "local":
+        return _row("info", "Local folders: no GitHub access is needed. Connect GitHub only for pull request reviews.")
     env = _env(hub_dir)
     if env.get("GITHUB_APP_ID"):
         return _row("info", "A GitHub App is set. Run hubzoid schedule run . setup_check to test each repo.")

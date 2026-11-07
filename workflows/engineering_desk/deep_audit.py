@@ -199,8 +199,9 @@ def complete(repo: str, queued_only: bool) -> None:
 
 @step()
 def secret_sweep(repo: str) -> dict:
-    """The weekly secret scan of the whole default branch: Gitleaks over the
-    checkout. Its hits go through the audit's second pass like any finding."""
+    """The weekly secret scan: Gitleaks over the whole checkout, or for a local
+    folder over every commit in its history (a key deleted later is still in
+    the history). Its hits go through the audit's second pass like any finding."""
     settings, store, gh = flow.ctx()
     tool = gz.scanners.find("gitleaks", download=settings.source != "sample")
     if not tool.ready:
@@ -210,7 +211,10 @@ def secret_sweep(repo: str) -> dict:
         return {"problem": problem}
     root = gz.checkout.path_for(hub.data_dir, repo)
     try:
-        hits = gz.checks.secret_scan(root, tool.path)
+        if settings.source == "local":
+            hits = gz.checks.secret_scan(Path(settings.folders()[repo]).expanduser(), tool.path, history=True)
+        else:
+            hits = gz.checks.secret_scan(root, tool.path)
     except gz.checks.ScanError as exc:
         store.coverage_error(repo, "secret scan", f"secret scan not run: {exc}")
         return {"problem": f"secret scan not run: {exc}"}

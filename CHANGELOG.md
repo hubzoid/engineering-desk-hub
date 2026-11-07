@@ -87,3 +87,7 @@ the move from the old names.
 - **Weekly secret scan.** Each full deep audit runs Gitleaks over the whole
   default branch. The audit's second pass checks every hit before anyone is
   alerted. A scan that could not run is a coverage problem.
+- **Local folders.** `source: local` with a `path:` per repo checks git
+  working copies on this machine, with no GitHub token: what git tracks at
+  the current commit (never ignored files such as `.env`), and the whole
+  history for secrets. Pull request reviews and reports need GitHub.

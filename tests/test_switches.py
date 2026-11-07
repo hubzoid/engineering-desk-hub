@@ -187,7 +187,7 @@ def test_the_review_fingerprint_sees_exactly_what_it_saw_before_the_switches():
     """Hubs from the bundled template keep their fingerprints, so upgrading
     neither re-reviews nor releases a skipped backlog."""
     s = load({"source": "github", "repos": [{"name": "a/api", "reviews": True}]})
-    repo = s.repo("a/api").model_dump(exclude={"reviews", "security", "reports"})
+    repo = s.repo("a/api").model_dump(exclude={"reviews", "security", "reports", "path"})  # as configuration_version
     review = s.review.model_dump(exclude={"wait_for_profile_minutes"})
     assert set(repo) == {"name", "severity_floor", "model", "context", "commands", "status_check", "exclude_paths"}
     assert set(review) == {"severity_floor", "backlog", "first_run_limit", "max_prs_per_run", "max_findings",

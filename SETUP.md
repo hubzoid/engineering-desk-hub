@@ -24,6 +24,24 @@ cp .env.example .env
 
 ## 2. Give Engineering Desk a GitHub token
 
+> **Only want to check code on this machine?** Skip the token. Point
+> Engineering Desk at local folders instead, in `workflows/settings.yaml`:
+>
+> ```yaml
+> engineering_desk:
+>   version: 2
+>   source: local
+>   repos:
+>     - name: me/ios-app          # any owner/name label
+>       path: ~/code/ios-app      # a git working copy
+>       security: true
+> ```
+>
+> It reads what git tracks at the folder's current commit (ignored files
+> such as `.env` never, uncommitted edits once committed), scans the folder's
+> whole history for secrets, and writes nothing to it. Pull request reviews
+> and reports need GitHub, so they stay off until you connect it.
+
 Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
 with access to **only the repos you want Engineering Desk to read**. Chat can read
 anything the token can, so the token is the real limit.

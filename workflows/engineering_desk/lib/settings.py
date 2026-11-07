@@ -32,6 +32,7 @@ class _Strict(BaseModel):
 
 class RepoSettings(_Strict):
     name: str
+    path: str | None = None         # with source: local, the git working copy on this machine
     severity_floor: Severity | None = None
     model: str | None = None
     context: str = ""
@@ -132,7 +133,7 @@ class Email(_Strict):
 
 class Settings(_Strict):
     version: Literal[1, 2] = 1
-    source: Literal["sample", "github"] = "sample"
+    source: Literal["sample", "github", "local"] = "sample"
     trigger: Literal["poll", "webhook"] = "poll"
     commands: bool = True
     context: str = ""
@@ -161,6 +162,23 @@ class Settings(_Strict):
         return self
 
     @model_validator(mode="after")
+    def _local_folders(self):
+        """source: local reads git working copies on this machine: every repo
+        names its folder, and nothing that needs GitHub (pull request reviews,
+        reports from merged pull requests) can be on."""
+        for r in self.repos:
+            if self.source == "local":
+                if not r.path:
+                    raise ValueError(f"repos.{r.name}: with source: local, give the folder as path: ~/code/app")
+                needs_github = [s for s in ("reviews", "reports") if getattr(r, s) or self.version == 1]
+                if needs_github:
+                    raise ValueError(f"repos.{r.name}: {' and '.join(needs_github)} need GitHub; with source: local "
+                                     "only security (the repo check, dependency watch and audit) and chat run")
+            elif r.path:
+                raise ValueError(f"repos.{r.name}: path is for source: local; source is {self.source}")
+        return self
+
+    @model_validator(mode="after")
     def _groups_name_known_repos(self):
         names = self.repo_names()
         for kind, groups in (("security_groups", self.security_groups), ("digest_groups", self.digest_groups)):
@@ -179,6 +197,10 @@ class Settings(_Strict):
                     raise ValueError(f"{r} is in security groups {owner[r]} and {gname}; a repo belongs to at most one")
                 owner[r] = gname
         return self
+
+    def folders(self) -> dict[str, str]:
+        """With source: local, each repo's folder."""
+        return {r.name: r.path for r in self.repos if r.path}
 
     def repo_names(self) -> list[str]:
         """Every repo Engineering Desk knows: chat tools and profiles cover them all."""
