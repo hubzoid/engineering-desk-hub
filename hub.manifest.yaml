@@ -9,6 +9,10 @@ doctor:
     entrypoint: doctor/checks.py:schedules
     timeout_seconds: 10
     required: true
+  - id: engineering_desk.scanners
+    entrypoint: doctor/checks.py:scanners
+    timeout_seconds: 10
+    required: false
   - id: engineering_desk.github
     entrypoint: doctor/checks.py:github
     timeout_seconds: 25

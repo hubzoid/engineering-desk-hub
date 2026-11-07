@@ -40,7 +40,10 @@ def check() -> dict:
     from hubzoid.access import store_for
     subject = hub.user.email or hub.user.id
     access = store_for(flow.HUB_DIR).can(subject, hub.name, "engineering_desk")
-    return {"chat_tools": "enabled for " + subject if access else
+    # Fetch the pinned scanners now, so the first review and security watch don't wait for them.
+    tools = {} if settings.source == "sample" else {t.name: t.note for t in map(gz.scanners.find, ("gitleaks", "trivy"))}
+    return {"scanners": tools or "the sample uses no downloaded scanner",
+            "chat_tools": "enabled for " + subject if access else
             "Not enabled for " + subject + ". Grant Engineering Desk tools in Settings, Agents, Engineering Desk, Access, "
             "or run: hubzoid grant " + subject + " engineering_desk .",
             "source": settings.source, "repos": repos,

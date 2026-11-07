@@ -75,12 +75,16 @@ SAFE_RUNS = {
 }
 
 
-def run_analyzers(files: list[dict], read_head, analyzers: list[dict]) -> tuple[list[dict], list[str]]:
+def run_analyzers(files: list[dict], read_head, analyzers: list[dict],
+                  download: bool = True) -> tuple[list[dict], list[str]]:
     """Scan untrusted data with isolated presets; custom commands require opt-in.
 
     Config and ignore files remain scan targets, but never control the presets.
     Custom commands are NOT sandboxed and can execute project configuration.
+    Gitleaks is the pinned build (scanners.py), downloaded on first use unless
+    `download` is off (the sample), then the one on PATH.
     """
+    from . import scanners
     if not analyzers:
         return [], []
     checks, notes = [], []
@@ -115,9 +119,13 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict]) -> tuple[
             if not preset and not a.get("allow_project_code", False):
                 notes.append(f"{name}: skipped; custom commands require allow_project_code: true and may execute PR code")
                 continue
-            exe = shutil.which(cmd[0])
+            if preset and tool in scanners.PINS:
+                found = scanners.find(tool, download=download)
+                exe = found.path
+            else:
+                found, exe = None, shutil.which(cmd[0])
             if exe is None:
-                notes.append(f"{name}: not installed, skipped")
+                notes.append(f"{name}: not installed, skipped" + (f" ({found.note})" if found else ""))
                 continue
             if preset:
                 cmd = [exe, *(str(root) if x == "." else x for x in cmd[1:])]

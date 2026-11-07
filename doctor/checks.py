@@ -21,7 +21,7 @@ def _row(status: str, summary: str, recovery: str | None = None, details: dict |
     return out
 
 
-def _settings(hub_dir: Path):
+def _lib(hub_dir: Path):
     root = hub_dir / "workflows" / "engineering_desk" / "lib"
     name = "engineering_desk_doctor_lib"
     if name not in sys.modules:
@@ -29,7 +29,11 @@ def _settings(hub_dir: Path):
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
         spec.loader.exec_module(module)
-    return sys.modules[name].settings
+    return sys.modules[name]
+
+
+def _settings(hub_dir: Path):
+    return _lib(hub_dir).settings
 
 
 def _env(hub_dir: Path) -> dict:
@@ -72,6 +76,21 @@ def schedules(context) -> dict:
         return _row("ok", "Schedules are on: sweeps, profiles, the security watch and reports run on their own.")
     return _row("fail", "Schedules are off: nothing Engineering Desk schedules will run, though the web app lists times.",
                 "Add HUBZOID_SCHEDULES=1 to .env (it is in .env.example) and restart hubzoid run.")
+
+
+def scanners(context) -> dict:
+    """Which Gitleaks and Trivy will run: the pinned builds, the ones on PATH,
+    or none yet. Reads only: a missing pinned build is downloaded by the first
+    review or security watch that needs it, not here."""
+    hub_dir = Path(context["hub_dir"])
+    lib = _lib(hub_dir)
+    tools = [lib.scanners.status(name) for name in ("gitleaks", "trivy")]
+    summary = "; ".join(t.note for t in tools) + "."
+    details = {t.name: {"path": t.path, "version": t.version} for t in tools}
+    if any(not t.ready and "no pinned build" in t.note for t in tools):
+        return _row("warn", summary, "Install the missing tool on PATH; reviews and the security watch say what "
+                    "they could not check without it.", details=details)
+    return _row("ok" if all(t.ready for t in tools) else "info", summary, details=details)
 
 
 def github(context) -> dict:

@@ -269,6 +269,9 @@ def combined_prompt(findings: list[dict], pr: dict) -> str:
 
 ICONS = {"bug": "🐛 Bug", "security": "🔒 Security", "tests": "🧪 Tests", "convention": "📐 Team rule"}
 # Analyzer and CI notes describe the run; any other note means part of the review is missing.
+# A secret scanner that did not run is said at the top of the summary: the
+# change was then checked for secrets by Engineering Desk's own patterns only.
+SCANNER_DOWN = re.compile(r"^gitleaks: (not installed|timed out|no SARIF)")
 RUN_NOTE = re.compile(r"^(CI |[\w.-]+: (\d+ result\(s\) on added lines|not installed, skipped|timed out, skipped|"
                       r"no SARIF output|skipped; custom commands|custom command opted in))")
 SUGGESTION_CHARS = 400         # one line
@@ -352,6 +355,10 @@ def summary(view: dict, pr: dict, commands: bool) -> str:
     out = [SUMMARY_MARKER, f"### Engineering Desk review · {verdict_text}", "",
            f"**Merge risk: {view['risk']}** · commit `{view['sha'][:7]}` · "
            f"{view['reviewed_files']} of {view['total_files']} files reviewed"]
+    down = [n for n in view.get("notes") or [] if SCANNER_DOWN.match(n)]
+    if down:
+        out += ["", "> ⚠️ **The secret scanner did not run** (" + "; ".join(down)
+                + "). Secrets in this change were checked by Engineering Desk's own patterns only."]
     if view.get("summary"):
         out += ["", "## 📝 Summary", f"- {sentence(view['summary'])}"]
     if view.get("paused"):

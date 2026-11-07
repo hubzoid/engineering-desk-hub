@@ -236,7 +236,8 @@ def prepare(repo: str, number: int, force: bool = False) -> dict:
     diff_text, left_out = gz.diff.format_diff(review_files, rc.max_diff_chars, built=built)
     sweep = gz.checks.sweep(review_files)
     analyzer_hits, notes = gz.checks.run_analyzers(review_files, lambda p: gh.file(repo, p, head),
-                                                   [a.model_dump() for a in settings.analyzers])
+                                                   [a.model_dump() for a in settings.analyzers],
+                                                   download=settings.source != "sample")
     code_findings = [{**f, "checked": True} for f in
                      gz.checks.secret_findings(sweep) + gz.rules.code_checks(rules_now, review_files)]
     own = gh.login()

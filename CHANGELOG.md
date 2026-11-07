@@ -66,3 +66,16 @@ the move from the old names.
 - **"Not checked", never "0 issues".** A repo where the audit can read no
   file is reported as not checked, and is never recorded as a clean audit.
   The security watch says the same for a repo with no dependency file.
+- **Scanners for everyone.** Gitleaks 8.30.1 and Trivy 0.76.1 are
+  downloaded on first use from their GitHub releases, checked against a
+  pinned SHA-256, and kept in a cache outside the hub's data folder.
+  `hubzoid hub doctor .` shows which build runs, and `setup_check` fetches
+  them. A machine that cannot download uses the tool on PATH. A review whose
+  secret scanner did not run says so at the top. The sample never downloads.
+- **Every dependency file.** The security watch lists packages with Trivy,
+  so Swift (`Package.resolved`), CocoaPods (`Podfile.lock`), Maven, NuGet,
+  Dart and others are checked, not only Python, npm, Go, Rust, Ruby and PHP.
+  OSV.dev still supplies the advisories; CocoaPods, which it does not cover,
+  gets them from Trivy's database, downloaded only for repos that have a
+  `Podfile.lock`. Without Trivy the Desk's own readers run, and any other
+  dependency file is reported as not checked.

@@ -2,8 +2,11 @@
 CISA Known Exploited Vulnerabilities catalog.
 
   1. checkout     the default branch, read-only, in the private data folder
-  2. parse        lockfiles for Python, npm, Go, Rust, Ruby and PHP
-  3. feeds        OSV advisories and the KEV catalog (code decides what counts)
+  2. packages     every dependency file, listed by Trivy (Swift, CocoaPods, Maven,
+                  NuGet, Dart and the rest); without Trivy, the Desk's own readers
+                  for Python, npm, Go, Rust, Ruby and PHP, and the rest "not checked"
+  3. feeds        OSV advisories and the KEV catalog (code decides what counts);
+                  CocoaPods, which OSV does not cover, through Trivy's database
   4. reachability where the code imports each package
   5. hub.call_llm judge reachability and write impact and fix, once per advisory
   6. ledger       new, worse and resolved, so nothing is alerted twice
@@ -57,7 +60,20 @@ def scan(repo: str) -> dict:
         root, sha = gz.checkout.ensure(gh, repo, hub.data_dir)
         skipped: list[str] = []
         manifests, all_listed = gz.security.manifest_files(root, exclude=settings.exclude_for(repo), skipped=skipped)
-        deps, problems = gz.security.dependencies(manifests)
+        # The sample is offline and fixed: it keeps the Desk's own readers.
+        trivy = gz.scanners.find("trivy") if settings.source != "sample" else None
+        cache = gz.scanners.cache_dir() / "trivy-data"
+        deps, problems, read_with = gz.security.list_dependencies(
+            root, manifests, trivy.path if trivy else None, cache, exclude=settings.exclude_for(repo),
+            skipped=skipped, note=trivy.note if trivy else "the sample uses the Desk's own readers")
+        if trivy and trivy.ready and any(d["ecosystem"] == "CocoaPods" for d in deps):
+            try:
+                pods = gz.security.trivy_cocoapods(root, trivy.path, cache, deps)
+            except gz.security.ScannerError as exc:
+                pods = []
+                problems.append(f"CocoaPods packages not checked: {exc}")
+        else:
+            pods = []
         if not all_listed:
             problems.append(f"more than {len(manifests)} dependency files; the rest were not checked")
         notes += problems
@@ -68,7 +84,7 @@ def scan(repo: str) -> dict:
             kev = set()
             store.coverage_error(repo, "exploited-now list", str(exc))
             notes.append(str(exc))
-        advisories = feeds.advisories(deps) if deps else []
+        advisories = (feeds.advisories(deps) if deps else []) + pods
     except Exception as exc:  # noqa: BLE001 - reported, never silent
         store.coverage_error(repo, "dependencies", f"{type(exc).__name__}: {exc}")
         return {"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]}
@@ -92,7 +108,8 @@ def scan(repo: str) -> dict:
         items.append(a)
     if problems:
         store.coverage_error(repo, "lockfiles", "; ".join(problems))
-    return {"repo": repo, "sha": sha, "deps": len(deps), "items": items, "unused": unused, "notes": notes,
+    return {"repo": repo, "sha": sha, "deps": len(deps), "read_with": read_with, "items": items, "unused": unused,
+            "notes": notes,
             "complete": not problems, "profile": gz.profiles.text(store.profile(repo)), "skipped": skipped}
 
 
