@@ -190,7 +190,7 @@ In **Settings, Agents, Engineering Desk, Access**, grant:
 | Permission | Lets a person |
 |---|---|
 | `use_hub` and `engineering_desk` | Chat with Engineering Desk and use its tools |
-| `wf_code_report`, `wf_delivery_report`, `wf_repo_profiles`, `wf_review_diff` | Run those workflows for themselves |
+| `wf_check_repo`, `wf_code_report`, `wf_delivery_report`, `wf_repo_profiles`, `wf_review_diff` | Run those workflows for themselves ("Check my repo" is `wf_check_repo`) |
 | `schedule_reports` | Keep a personal report on a schedule |
 | `engineering_desk_admin` | Approve or reject drafted team rules |
 | `engineering_desk_manager` and `wf_people_report` | See activity counts for the digest groups in their `engineering_desk_groups` attribute. Counts describe activity. They never score people. |
