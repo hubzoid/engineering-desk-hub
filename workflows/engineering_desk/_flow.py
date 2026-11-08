@@ -734,7 +734,8 @@ def dependency_scan(repo: str) -> dict:
         items.append(a)
     if problems:
         store.coverage_error(repo, "lockfiles", "; ".join(problems))
-    return {"repo": repo, "sha": sha, "deps": len(deps), "files": len(manifests), "read_with": read_with,
+    files = len(manifests) + len(gz.security.trivy_only_files(root, settings.exclude_for(repo)))
+    return {"repo": repo, "sha": sha, "deps": len(deps), "files": files, "read_with": read_with,
             "items": items, "unused": unused,
             "notes": notes,
             "complete": not problems, "profile": gz.profiles.text(store.profile(repo)), "skipped": skipped}

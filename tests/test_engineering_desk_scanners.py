@@ -210,3 +210,12 @@ def test_a_secret_scanner_that_did_not_run_is_said_at_the_top():
     warning = next(i for i, l in enumerate(lines) if "The secret scanner did not run" in l)
     assert warning < next(i for i, l in enumerate(lines) if l.startswith("## 📝 Summary"))
     assert "Engineering Desk's own patterns only" in lines[warning]
+
+
+def test_a_podfile_lock_counts_as_a_dependency_file(tmp_path):
+    """Seen on a real repo: a Podfile.lock with no pods is a file that was read, not "no dependency file"."""
+    (tmp_path / "App").mkdir()
+    (tmp_path / "App/Podfile.lock").write_text("PODFILE CHECKSUM: 0\n\nCOCOAPODS: 1.8.4\n")
+    (tmp_path / "Pods/X").mkdir(parents=True)
+    (tmp_path / "Pods/X/Package.resolved").write_text("{}")
+    assert gz.security.trivy_only_files(tmp_path) == ["App/Podfile.lock"]

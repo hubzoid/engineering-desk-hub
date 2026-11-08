@@ -360,6 +360,13 @@ def trivy_cocoapods(root: Path, trivy: str, cache: Path, deps: list[dict], timeo
     return out
 
 
+def trivy_only_files(root: Path, exclude: list[str] = ()) -> list[str]:
+    """Dependency files only Trivy reads (Podfile.lock, Package.resolved and
+    the rest), outside vendored, test and excluded folders."""
+    return sorted(p.relative_to(root).as_posix() for name in TRIVY_ONLY for p in Path(root).rglob(name)
+                  if p.is_file() and _kept(p.relative_to(root).as_posix(), list(exclude), None))
+
+
 def list_dependencies(root: Path, manifests: dict[str, str], trivy: str | None, cache: Path | None,
                       exclude: list[str] = (), skipped: list[str] | None = None,
                       note: str = "") -> tuple[list[dict], list[str], str]:
@@ -374,8 +381,7 @@ def list_dependencies(root: Path, manifests: dict[str, str], trivy: str | None, 
         except ScannerError as exc:
             note = str(exc)
     deps, problems = dependencies(manifests)
-    others = sorted(p.relative_to(root).as_posix() for name in TRIVY_ONLY for p in Path(root).rglob(name)
-                    if p.is_file() and _kept(p.relative_to(root).as_posix(), list(exclude), None))
+    others = trivy_only_files(root, exclude)
     if others:
         problems.append(f"not checked without Trivy ({note or 'not installed'}): " + ", ".join(others[:10]))
     return deps, problems, "the Desk's own readers"
