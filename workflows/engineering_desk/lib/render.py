@@ -226,11 +226,12 @@ CHECKS = [("secret scan", "Secrets", "Gitleaks over the whole repo"),
           ("dependencies", "Dependencies", "every dependency file, against OSV.dev and CISA's exploited list"),
           ("lockfiles", "Dependency files", "each dependency file could be read"),
           ("exploited-now list", "Exploited-now list", "CISA's catalog of vulnerabilities exploited now"),
-          ("audit", "Code audit", "the riskiest files first, each finding double-checked")]
+          ("audit", "Code audit", "every file, riskiest first, each finding double-checked"),
+          ("first look", "Code: first look", "the riskiest files only, capped at a few minutes")]
 
 
 def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], notes: list[str] = (),
-              verified: bool = True) -> str:
+              verified: bool = True, previews: list[dict] = ()) -> str:
     """One page per repo, behind one link that always shows the latest run:
     secrets with file and line, vulnerable packages and whether the code uses
     them, the top code findings (each double-checked), and what was checked
@@ -252,7 +253,7 @@ def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], not
 
     body = [tiles([("secrets", count(len(secrets), "secret scan"), ""),
                    ("vulnerable packages", count(len(deps), "dependencies"), ""),
-                   ("code findings", count(len(code), "audit"), "")])]
+                   ("code findings", count(len(code), "audit", "first look"), "")])]
     problems = [c for c in coverage if c.get("last_error")]
     if problems or notes:
         body.append('<p class="lead warn">Part of this repo was not checked: '
@@ -278,7 +279,11 @@ def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], not
          for r in code[:20]]) + ('<p class="meta">Each one survived a second pass that tried to refute it.</p>'
                                   if verified else '<p class="meta warn">The second pass is off (audit.verify: '
                                                    'false): these are unchecked.</p>')
-        if ran("audit") else "<p class=\"meta warn\">Not checked yet.</p>"))
+        if ran("audit", "first look") else "<p class=\"meta warn\">Not checked yet.</p>"))
+    if previews:
+        body.append("<h2>Pull request previews</h2>" + table(["Pull request", "Review"], [
+            [p.get("pr") or "", p.get("verdict") or p.get("skipped") or p.get("failed") or ""] for p in previews])
+            + '<p class="meta">Reviewed here only: nothing was posted on GitHub.</p>')
     body.append("<h2>What was checked</h2>" + table(["Check", "What it covers", "State"], [
         [label, what, ("problem: " + by_check[name]["last_error"]) if by_check.get(name, {}).get("last_error")
          else (f"checked {by_check[name]['last_ok'][:16].replace('T', ' ')}" if by_check.get(name, {}).get("last_ok")

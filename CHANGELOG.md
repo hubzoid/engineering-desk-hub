@@ -97,3 +97,9 @@ the move from the old names.
   what was checked and what was not. The security watch and the deep audit
   refresh it after each repo; a page whose data did not change stores no
   new copy.
+- **Check my repo** (`check_repo`, in chat and Runs): a first result on your
+  own code in minutes. Secrets and dependencies first, on the repo page at
+  once; then a first look at the riskiest code, capped at a few minutes,
+  each finding double-checked; then previews of the newest pull requests,
+  only with GitHub connected and publishing in preview. Nothing is posted
+  and no one is emailed. The digest is not part of a first run.
