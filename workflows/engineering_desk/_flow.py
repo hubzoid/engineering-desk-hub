@@ -734,9 +734,20 @@ def dependency_scan(repo: str) -> dict:
         items.append(a)
     if problems:
         store.coverage_error(repo, "lockfiles", "; ".join(problems))
-    return {"repo": repo, "sha": sha, "deps": len(deps), "read_with": read_with, "items": items, "unused": unused,
+    return {"repo": repo, "sha": sha, "deps": len(deps), "files": len(manifests), "read_with": read_with,
+            "items": items, "unused": unused,
             "notes": notes,
             "complete": not problems, "profile": gz.profiles.text(store.profile(repo)), "skipped": skipped}
+
+
+def dependency_count(s: dict) -> int | str:
+    """The packages checked, or why none were: no file at all is "not checked";
+    files with no exact version pinned were checked and have nothing to look up."""
+    if s["deps"]:
+        return s["deps"]
+    if s.get("files"):
+        return f"0: no exact version pinned in {s['files']} dependency file{'s' if s['files'] > 1 else ''}"
+    return "not checked: no dependency file found"
 
 
 def judge_dependencies(settings, repo: str, s: dict) -> tuple[list[dict], list[dict]]:

@@ -90,3 +90,10 @@ def test_the_repo_check_runs_on_a_local_folder_with_no_github_token(local_hub):
     page = _pages(r)[-1]["html"]
     assert "App/Auth/Login.swift" in page and "in commit" in page
     assert out["pull_request_previews"] == "Connect GitHub to preview pull request reviews."
+
+
+def test_files_without_pinned_versions_are_checked_not_missing(hub):
+    count = h.flow(hub).dependency_count
+    assert count({"deps": 3, "files": 1}) == 3
+    assert count({"deps": 0, "files": 2}) == "0: no exact version pinned in 2 dependency files"
+    assert count({"deps": 0, "files": 0}) == "not checked: no dependency file found"

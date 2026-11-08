@@ -197,7 +197,7 @@ def check_repo():
         first_dependency_record(repo, items, ignored, stamp, not deps["notes"], deps["complete"],
                                 deps.get("skipped", []))
         notes += deps["notes"]
-        dep_summary = {"dependencies": deps["deps"] or "not checked: no dependency file found",
+        dep_summary = {"dependencies": flow.dependency_count(deps),
                        "read_with": deps.get("read_with"), "vulnerable": len(items)}
     sweep = first_secrets(repo)
     if sweep.get("problem"):

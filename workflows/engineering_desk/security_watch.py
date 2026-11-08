@@ -100,7 +100,7 @@ def security_watch():
             for k in changes:
                 changes[k] += [{**x, "repo": repo} for x in c[k]]
             # No dependency file read is "not checked", never "0 advisories".
-            summary.append({"repo": repo, "dependencies": s["deps"] or "not checked: no dependency file found",
+            summary.append({"repo": repo, "dependencies": flow.dependency_count(s),
                             "advisories": len(items),
                             "new": len(c["new"]), "worse": len(c["escalated"]), "resolved": len(c["resolved"]),
                             "unused_dropped": s["unused"], "notes": s["notes"],
