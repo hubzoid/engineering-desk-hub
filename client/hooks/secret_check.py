@@ -33,7 +33,7 @@ def main() -> int:
         print(f"Engineering Desk: secret check skipped ({tool.note}).", file=sys.stderr)
         return 0
     proc = subprocess.run([tool.path, "git", "--pre-commit", "--staged", "--redact", "--no-banner", "--exit-code", "1",
-                           "--log-level", "warn", "."], capture_output=True, text=True)
+                           "--log-level", "warn", "--verbose", "."], capture_output=True, text=True)
     if proc.returncode == 0:
         return 0
     if proc.returncode == 1:

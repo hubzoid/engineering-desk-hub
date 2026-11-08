@@ -67,6 +67,7 @@ def test_committing_a_key_is_blocked_in_seconds(repo, tmp_path):
                              text=True, env=env)
     assert blocked.returncode != 0 and "stopped this commit" in blocked.stderr
     assert _token(3) not in blocked.stderr + blocked.stdout  # redacted
+    assert "config.py" in blocked.stderr and "github-pat" in blocked.stderr  # where, and what kind
     assert time.time() - started < 15
 
     (repo / "config.py").write_text('import os\nTOKEN = os.environ["TOKEN"]\n')
