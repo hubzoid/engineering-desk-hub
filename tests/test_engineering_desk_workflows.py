@@ -272,7 +272,8 @@ def test_security_watch_alerts_once(hub):
     group = r.value["platform"]["repos"][0]
     assert (group["new"], group["advisories"]) == (1, 1)  # PyYAML 5.3.1, reachable from app/catalog.py
     assert r.emails[0]["list"] == "platform-security" and "pyyaml" in r.emails[0]["body"]
-    assert r.artifacts[0]["audience"] == "hub" and r.artifacts[0]["key"] is None  # one page per alert
+    alert = next(a for a in r.artifacts if a["key"] is None)  # one page per alert, beside the repo page
+    assert alert["audience"] == "hub" and "Security" in alert["title"]
     row = store(hub).ledger_rows([REPO])[0]
     assert row["severity"] == "critical" and "reachable" in row["impact"]
     again = h.run_local(security, hub_dir=hub, trigger="schedule")

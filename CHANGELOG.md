@@ -91,3 +91,9 @@ the move from the old names.
   working copies on this machine, with no GitHub token: what git tracks at
   the current commit (never ignored files such as `.env`), and the whole
   history for secrets. Pull request reviews and reports need GitHub.
+- **Repo page.** One page per repo, behind one link that always shows the
+  latest run: secrets with file and line, vulnerable packages and whether
+  the code uses them, the top code findings (each double-checked), and
+  what was checked and what was not. The security watch and the deep audit
+  refresh it after each repo; a page whose data did not change stores no
+  new copy.

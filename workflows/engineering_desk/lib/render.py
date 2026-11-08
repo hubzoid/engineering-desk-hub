@@ -220,3 +220,68 @@ def security_page(group: str, stamp: str, changes: dict, open_rows: list[dict], 
     if not open_rows:
         body.append("<p>No open findings in the completed checks. Review coverage above.</p>")
     return page(f"Security · {group}", f"Checked {stamp}", "".join(body))
+
+
+CHECKS = [("secret scan", "Secrets", "Gitleaks over the whole repo"),
+          ("dependencies", "Dependencies", "every dependency file, against OSV.dev and CISA's exploited list"),
+          ("lockfiles", "Dependency files", "each dependency file could be read"),
+          ("exploited-now list", "Exploited-now list", "CISA's catalog of vulnerabilities exploited now"),
+          ("audit", "Code audit", "the riskiest files first, each finding double-checked")]
+
+
+def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], notes: list[str] = (),
+              verified: bool = True) -> str:
+    """One page per repo, behind one link that always shows the latest run:
+    secrets with file and line, vulnerable packages and whether the code uses
+    them, the top code findings (each double-checked), and what was checked
+    and what was not. A check that never ran says "not checked", never "0"."""
+    open_rows = [r for r in rows if r["state"] == "open"]
+    secrets = [r for r in open_rows if r["kind"] == "audit" and r.get("advisory") == "secret"]
+    deps = [r for r in open_rows if r["kind"] == "dependency"]
+    unreachable = [r for r in rows if r["kind"] == "dependency" and r["state"] == "ignored"]
+    code = [r for r in open_rows if r["kind"] == "audit" and r.get("advisory") != "secret"]
+    rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    code.sort(key=lambda r: (rank.get(r["severity"], 4), r.get("path") or "", r.get("line") or 0))
+    by_check = {c["check_name"]: c for c in coverage}
+
+    def ran(*names: str) -> bool:
+        return any(by_check.get(n, {}).get("last_ok") for n in names)
+
+    def count(n: int, *checks: str):
+        return n if ran(*checks) else "not checked"
+
+    body = [tiles([("secrets", count(len(secrets), "secret scan"), ""),
+                   ("vulnerable packages", count(len(deps), "dependencies"), ""),
+                   ("code findings", count(len(code), "audit"), "")])]
+    problems = [c for c in coverage if c.get("last_error")]
+    if problems or notes:
+        body.append('<p class="lead warn">Part of this repo was not checked: '
+                    + esc("; ".join([f"{c['check_name']}: {c['last_error']}" for c in problems] + list(notes)))
+                    + "</p>")
+    body.append("<h2>Secrets</h2>" + (table(["File", "Line", "What", "Fix"], [
+        [r.get("path") or "", r.get("line") or "", r.get("title") or "", "Rotate it, then load it from the environment"]
+        for r in secrets]) if ran("secret scan") else "<p class=\"meta warn\">Not checked yet.</p>"))
+    body.append("<h2>Vulnerable packages</h2>" + (table(
+        ["Package", "Version", "Advisory", "Severity", "Does the code use it?", "Fix", "File"],
+        [[r.get("package") or "", r.get("version") or "", r.get("advisory") or "",
+          r["severity"] + (" · exploited now" if r.get("kev") else ""),
+          r.get("impact") or "Not judged yet: treat it as used", r.get("fix") or "", r.get("path") or ""]
+         for r in deps]) if ran("dependencies") else "<p class=\"meta warn\">Not checked yet.</p>"))
+    if unreachable:
+        body.append(f"<details><summary>{len(unreachable)} more judged not reachable from this code</summary>"
+                    + table(["Package", "Version", "Advisory", "Why"],
+                            [[r.get("package") or "", r.get("version") or "", r.get("advisory") or "",
+                              r.get("impact") or ""] for r in unreachable]) + "</details>")
+    body.append("<h2>Top security findings in the code</h2>" + (table(
+        ["Severity", "File", "Line", "Finding", "Evidence"],
+        [[r["severity"], r.get("path") or "", r.get("line") or "", r.get("title") or "", r.get("impact") or ""]
+         for r in code[:20]]) + ('<p class="meta">Each one survived a second pass that tried to refute it.</p>'
+                                  if verified else '<p class="meta warn">The second pass is off (audit.verify: '
+                                                   'false): these are unchecked.</p>')
+        if ran("audit") else "<p class=\"meta warn\">Not checked yet.</p>"))
+    body.append("<h2>What was checked</h2>" + table(["Check", "What it covers", "State"], [
+        [label, what, ("problem: " + by_check[name]["last_error"]) if by_check.get(name, {}).get("last_error")
+         else (f"checked {by_check[name]['last_ok'][:16].replace('T', ' ')}" if by_check.get(name, {}).get("last_ok")
+               else "not checked")]
+        for name, label, what in CHECKS]))
+    return page(f"{repo}", f"Engineering Desk repo check · updated {stamp[:16].replace('T', ' ')}", "".join(body))

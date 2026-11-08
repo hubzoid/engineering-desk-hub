@@ -645,3 +645,28 @@ def now_iso() -> str:
 
 def dumps(x) -> str:
     return json.dumps(x, default=str)
+
+
+# ------------------------------------------------------------------ repo page
+
+def repo_page_key(repo: str) -> str:
+    """The page's series key: one per repo, so its link always shows the latest run."""
+    slug = re.sub(r"[^a-z0-9]+", "-", repo.lower()).strip("-")[:60]
+    return f"repo-{slug}-{hashlib.sha1(repo.encode()).hexdigest()[:6]}"
+
+
+@step()
+def publish_repo_page(repo: str, notes: list[str] | None = None) -> dict:
+    """Publish the repo's page under its fixed key. A page whose data did not
+    change stores no new copy; its link stays the same either way."""
+    settings = gz.settings.load(hub.setting("engineering_desk"))
+    store = gz.store.Store(hub.data_dir)
+    rows = store.ledger_rows([repo], state=None)
+    coverage = store.coverage([repo])
+    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    html = gz.render.repo_page(repo, stamp, rows, coverage, notes or [], verified=settings.audit.verify)
+    data = ([{k: v for k, v in r.items() if k not in ("last_seen", "alerted_at")} for r in rows],
+            [(c["check_name"], bool(c.get("last_ok")), c.get("last_error")) for c in coverage], notes)
+    art = gz.runtime.publish(hub, f"repo-{repo}", html, f"{repo} · repo check", key=repo_page_key(repo),
+                             team_audience="hub", digest=gz.runtime.digest_of(*data))
+    return {"repo": repo, "page": gz.runtime.link_of(art)}
