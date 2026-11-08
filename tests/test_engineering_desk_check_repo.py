@@ -36,6 +36,8 @@ def test_check_my_repo_publishes_secrets_and_dependencies_first(hub):
     assert out["first_look"].endswith("parts") and out["code_findings"] >= 0
     assert out["pull_request_previews"] == "Connect GitHub to preview pull request reviews."
     assert "Checked kestrel-oak/storefront" in out["answer"] and out["page"] in out["answer"]
+    assert "1 vulnerable package," in out["answer"] or "vulnerable packages," in out["answer"]
+    assert " 1 secrets" not in out["answer"] and " 1 code findings" not in out["answer"]
     assert r.emails == []                                           # a first run emails no one
     assert "weekly_digest" not in str(r.calls)
 

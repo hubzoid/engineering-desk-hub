@@ -236,8 +236,14 @@ def check_repo():
            "code_findings": len(look["new"]), "code_refuted_by_second_pass": look["refuted"],
            "first_look": f"{look['parts_read']} of {look['parts_total']} parts",
            "pull_request_previews": previews or pulls["note"], "not_checked": notes}
-    out["answer"] = (f"Checked {repo}: {out['secrets']} secrets, {dep_summary.get('vulnerable', 'not checked')} "
-                     f"vulnerable packages, {out['code_findings']} code findings from a first look at "
+    def count(n, word: str) -> str:
+        if not isinstance(n, int):
+            return f"{word}s: {n}"
+        return f"{n} {word}" + ("" if n == 1 else "s")
+
+    out["answer"] = (f"Checked {repo}: {count(out['secrets'], 'secret')}, "
+                     f"{count(dep_summary.get('vulnerable', 'not checked'), 'vulnerable package')}, "
+                     f"{count(out['code_findings'], 'code finding')} from a first look at "
                      f"{out['first_look']}. The page has the details: {page}"
                      + (f" Not checked: {'; '.join(notes)}." if notes else ""))
     return out
