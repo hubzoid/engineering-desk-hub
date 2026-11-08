@@ -94,9 +94,10 @@ the move from the old names.
 - **Repo page.** One page per repo, behind one link that always shows the
   latest run: secrets with file and line, vulnerable packages and whether
   the code uses them, the top code findings (each double-checked), and
-  what was checked and what was not. The security watch and the deep audit
-  refresh it after each repo; a page whose data did not change stores no
-  new copy.
+  what was checked and what was not. Check my repo publishes it, and
+  refreshes every repo's page daily at 07:30 from what the security watch
+  and the deep audit found (no scan, no model call). A page whose data did
+  not change stores no new copy.
 - **Check my repo** (`check_repo`, in chat and Runs): a first result on your
   own code in minutes. Secrets and dependencies first, on the repo page at
   once; then a first look at the riskiest code, capped at a few minutes,

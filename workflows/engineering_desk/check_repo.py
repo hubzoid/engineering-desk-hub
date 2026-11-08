@@ -11,6 +11,11 @@
 The digest is not part of a first run. Results fill one repo page as they
 finish, behind one link that always shows the latest run. Ask in chat
 ("Check my repo"), or start it from the agent's Runs.
+
+Every day at 07:30, after the security watch (06:00) and the deep audit
+(03:00), a scheduled run refreshes each repo's page from what they found:
+no scan and no model call. check_repo is the only workflow that publishes
+repo pages, because a page key belongs to one workflow in Hubzoid.
 """
 from __future__ import annotations
 
@@ -173,13 +178,27 @@ def _first_look(settings, repo: str, plan: dict, stamp: str, deadline: float) ->
     return {"parts_read": len(read), "parts_total": plan["total"], "new": new, "refuted": refuted, "stopped": stopped}
 
 
-@workflow(inputs=RepoCheck, as_tool=True, tool_wait="5m", surfaces=("web", "owui", "mcp"))
+def _refresh(settings) -> dict:
+    """The scheduled run: each repo's page from the store, nothing scanned."""
+    pages = {}
+    for repo in settings.repo_names():
+        try:
+            pages[repo] = flow.publish_repo_page(repo)["page"]
+        except Exception as exc:  # noqa: BLE001 - one page never stops the others
+            pages[repo] = f"not published: {type(exc).__name__}: {exc}"[:200]
+    return {"refreshed": pages}
+
+
+@workflow(inputs=RepoCheck, schedule="daily at 07:30", catch_up=True, as_tool=True, tool_wait="5m",
+          surfaces=("web", "owui", "mcp"))
 def check_repo():
     """Check my repo: secrets and vulnerable dependencies first (seconds), then a
     first look at the riskiest code (a few minutes, each finding double-checked),
     then previews of the newest pull requests when GitHub is connected. Results
     fill one repo page as they finish. Nothing is posted anywhere."""
     settings = gz.settings.load(hub.setting("engineering_desk"))
+    if hub.trigger in ("schedule", "update") and not (hub.input and hub.input.repo):
+        return _refresh(settings)
     try:
         repo = _repo(settings, hub.input.repo if hub.input else None)
     except ValueError as exc:

@@ -55,13 +55,29 @@ def hub(tmp_path, monkeypatch):
 
 
 def test_running_the_check_twice_leaves_one_link_with_the_newer_result(hub):
-    run = h.wf(hub, "security_watch")
-    first = h.run_local(run, hub_dir=hub, trigger="schedule")
-    second = h.run_local(run, hub_dir=hub, trigger="schedule")
+    h.run_local(h.wf(hub, "security_watch"), hub_dir=hub, trigger="schedule")   # finds PyYAML
+    check = h.wf(hub, "check_repo")
+    first = h.run_local(check, hub_dir=hub, trigger="schedule")                 # the daily refresh
+    second = h.run_local(check, hub_dir=hub, trigger="schedule")
     pages = [next(a for a in r.artifacts if (a.get("key") or "").startswith("repo-")) for r in (first, second)]
     assert pages[0]["key"] == pages[1]["key"] == h.flow(hub).repo_page_key(REPO)
-    link = first.value["platform"]["repos"][0]["page"]
-    assert link and link == second.value["platform"]["repos"][0]["page"]
+    assert first.value["refreshed"][REPO] and first.value["refreshed"] == second.value["refreshed"]
+    assert first.calls == []  # a refresh scans nothing and asks no model
     assert "pyyaml" in pages[1]["html"].lower() and "Vulnerable packages" in pages[1]["html"]
     keys = {h.flow(hub).repo_page_key(r) for r in ("a/b", "a-b/c", "A/B")}
     assert len(keys) == 3 and all(k.startswith("repo-") and k == k.lower() for k in keys)
+
+
+def test_only_check_repo_publishes_repo_pages():
+    """Hubzoid gives a page key to one workflow: a second workflow publishing
+    the same repo page fails its run (found running the hub end to end; the
+    test harness does not enforce key ownership)."""
+    folder = h.TEMPLATE / "workflows" / "engineering_desk"
+    users = sorted(p.name for p in folder.glob("*.py") if "publish_repo_page(" in p.read_text() and p.name != "_flow.py")
+    assert users == ["check_repo.py"]
+
+
+def test_the_watch_and_the_audit_publish_no_repo_page(hub):
+    for name in ("security_watch", "deep_audit"):
+        r = h.run_local(h.wf(hub, name), hub_dir=hub, trigger="schedule")
+        assert not any((a.get("key") or "").startswith("repo-") for a in r.artifacts), name

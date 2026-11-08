@@ -315,7 +315,6 @@ def deep_audit():
                 coverage_problem(repo, "; ".join(errors))
             else:
                 progressing(repo)
-        flow.publish_repo_page(repo)
     pages = {}
     for group, repos in p["group_repos"].items():
         new = new_by_group.get(group, [])
