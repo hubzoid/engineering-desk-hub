@@ -1,0 +1,11 @@
+# The Get started cards on a new chat, for the owner and admins (Hubzoid 2.0.8).
+# Each card shows whether a step is done and, if not, what to do. Model is
+# built into Hubzoid; the others are Engineering Desk's doctor checks
+# (hub.manifest.yaml), which return each card's line and detail.
+version: 1
+title: Get started
+cards:
+  - {id: model, title: Model, check: model}
+  - {id: code, title: Code, check: engineering_desk.settings}
+  - {id: github, title: GitHub, check: engineering_desk.github}
+  - {id: runs, title: Automatic checks, check: engineering_desk.schedules}

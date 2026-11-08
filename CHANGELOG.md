@@ -3,7 +3,7 @@
 ## 1.0.0 (unreleased)
 
 GitZoid moves out of the Hubzoid SDK into this repo and becomes the
-Engineering Desk. It needs Hubzoid 2.0.3 or later within 2.x.
+Engineering Desk. It needs Hubzoid 2.0.8 or later within 2.x.
 [UPGRADING.md](UPGRADING.md) covers hubs made from the bundled template and
 the move from the old names.
 
@@ -44,7 +44,7 @@ the move from the old names.
 - `setup.py` is removed: the token goes in `.env`, repos and options in
   `workflows/settings.yaml`.
 - Messages say Settings instead of Console.
-- Tests and CI live here, on Hubzoid 2.0.3 and the latest 2.x.
+- Tests and CI live here, on Hubzoid 2.0.8 (the minimum) and the latest 2.x.
 - **GitHub hiccups.** Reads (and GraphQL queries, and repo downloads) are
   retried with backoff when GitHub times out, drops the connection or
   answers 500 to 504. Writes are never resent after a server error or a
@@ -103,3 +103,10 @@ the move from the old names.
   each finding double-checked; then previews of the newest pull requests,
   only with GitHub connected and publishing in preview. Nothing is posted
   and no one is emailed. The digest is not part of a first run.
+- **Get started cards.** A new chat shows the owner and admins four cards,
+  from `get-started.yaml`: Model, Code, GitHub and Automatic checks. Each
+  says whether its step is done and, if not, what to do; GitHub shows as
+  "later", not a failure, when the code is a local folder. The doctor
+  checks return each card's line. The chat suggests "Check my repo", "What
+  is waiting or stuck right now?" and "See a sample review", and walks the
+  same four steps, never asking for a secret. Needs Hubzoid 2.0.8.

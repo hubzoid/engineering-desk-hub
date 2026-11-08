@@ -120,7 +120,7 @@ def test_the_repo_is_a_complete_hub():
         assert (root / rel).is_file(), rel
     ignored = (root / ".gitignore").read_text().split()
     assert {".env", ".hubzoid/", ".venv/"} <= set(ignored) and "restricted/" not in ignored
-    assert "hubzoid>=2.0.3,<3" in (root / "requirements.txt").read_text()
+    assert "hubzoid>=2.0.8,<3" in (root / "requirements.txt").read_text()  # 2.0.8: Get started cards
     assert "HUBZOID_SCHEDULES=1" in (root / ".env.example").read_text()
 
 

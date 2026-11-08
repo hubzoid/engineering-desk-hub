@@ -79,6 +79,22 @@ Open the address `hubzoid run` prints. Within two minutes the desk reviews the f
 
 Then ask *"Show the findings on storefront PR 102 with fix prompts."* You see each finding with a prompt you can hand to your own coding assistant to fix it. [Full setup](SETUP.md)
 
+### Your own code, in minutes
+
+A new chat shows four Get started cards (Model, Code, GitHub, Automatic checks), each saying whether it is done and what to do if not. GitHub can wait: point the desk at a folder on this machine instead, with no token.
+
+```yaml
+engineering_desk:
+  version: 2
+  source: local
+  repos:
+    - name: me/ios-app
+      path: ~/code/ios-app
+      security: true
+```
+
+Then ask *"Check my repo"*. Secrets and vulnerable dependencies are on the repo page within a minute, and a first look at the riskiest code follows within a few more, each finding double-checked. Nothing is posted anywhere.
+
 ## Integrations
 
 | Works with | What the desk does |
