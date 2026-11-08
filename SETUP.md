@@ -247,6 +247,28 @@ dismisses a finding. `client/github-actions/engineering-desk-fix.yml` runs the s
 loop in GitHub Actions when someone adds the `engineering-desk-fix` label. That one
 needs its own model API key in the repo's secrets.
 
+### Before you push: two local checks
+
+**A secret check on each commit** (opt-in, per repo). Gitleaks reads the
+staged changes only, in seconds, with no model call, and stops a key before
+it leaves the laptop:
+
+```bash
+python client/hooks/install.py ~/code/your-app            # turn it on
+python client/hooks/install.py ~/code/your-app --remove   # turn it off
+```
+
+It uses the same pinned Gitleaks as the hub. An existing pre-commit hook is
+never replaced: the installer prints the one line to add to it. If Gitleaks
+cannot run, the commit goes ahead and the hook says the check was skipped.
+
+**A review before opening a pull request.** With Engineering Desk connected
+over MCP (step 10, 1), ask Claude Code or Codex: *"review my diff with the
+Engineering Desk"*. It runs `review_diff` on `git diff`: the same team rules,
+checks and second pass as a pull request review, with the findings in your
+terminal and nothing posted. Pull request reviews on GitHub already include
+the security checks, secrets with the pinned Gitleaks among them.
+
 ## 11. Options
 
 All under `engineering_desk:` in `workflows/settings.yaml`. The file's comments show
@@ -262,6 +284,7 @@ the defaults.
 | `review.auto_pause_after` | `0`: keep reviewing | Pause a busy pull request after this many pushes |
 | `limits.model_calls_per_day` | `400` | Work over the limit is shown, not dropped |
 | `reports.evidence_prs` | `100` diffs per report | Bigger or smaller reports |
+| `reports.people` | `true`: managers with the grant may run the per-person activity report | `false` turns it off for everyone |
 | `analyzers` | Ruff when installed, and Gitleaks (a pinned build, downloaded on first use) | Your own SARIF tools, with `allow_project_code: true` only for trusted commands |
 
 ## 12. Troubleshooting and costs
