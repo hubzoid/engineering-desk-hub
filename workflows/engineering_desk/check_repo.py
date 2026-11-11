@@ -120,12 +120,14 @@ def newest_pulls(repo: str) -> dict:
 
 
 @step()
-def page_counts(repo: str) -> dict:
-    """The numbers the repo page shows: every open finding, from the store."""
+def page_counts(repo: str, stamp: str) -> dict:
+    """The numbers the repo page shows: every open finding, from the store;
+    and the code findings first seen in this run (`stamp`)."""
     rows = gz.store.Store(hub.data_dir).ledger_rows([repo], state="open")
     secret = [r for r in rows if r["kind"] == "audit" and r.get("advisory") == "secret"]
+    code = [r for r in rows if r["kind"] == "audit" and r.get("advisory") != "secret"]
     return {"secrets": len(secret), "vulnerable": sum(1 for r in rows if r["kind"] == "dependency"),
-            "code": sum(1 for r in rows if r["kind"] == "audit" and r.get("advisory") != "secret")}
+            "code": len(code), "new_code": sum(1 for r in code if r.get("first_seen") == stamp)}
 
 
 @step()
@@ -241,13 +243,13 @@ def check_repo():
         page = flow.publish_repo_page(repo, notes, previews)["page"]
 
     # The page's numbers (every open finding), so chat and page always agree.
-    shown = page_counts(repo)
+    shown = page_counts(repo, stamp)
     if dep_summary:
         dep_summary["vulnerable"] = shown["vulnerable"]
     out = {"repo": repo, "page": page, **dep_summary,
            "secrets": shown["secrets"] if not sweep.get("problem") else "not checked",
            "secrets_refuted_by_second_pass": len(refuted),
-           "code_findings": shown["code"], "new_code_findings": len(look["new"]),
+           "code_findings": shown["code"], "new_code_findings": shown["new_code"],
            "code_refuted_by_second_pass": look["refuted"],
            "first_look": f"{look['parts_read']} of {look['parts_total']} parts",
            "pull_request_previews": previews or pulls["note"], "not_checked": notes}
