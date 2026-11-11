@@ -75,6 +75,8 @@ the move from the old names.
 - **Every dependency file.** The security watch lists packages with Trivy,
   so Swift (`Package.resolved`), CocoaPods (`Podfile.lock`), Maven, NuGet,
   Dart and others are checked, not only Python, npm, Go, Rust, Ruby and PHP.
+  Indirect packages count too: each file's dependency tree is followed to
+  the end, so `qs` under `express` is checked like `express` itself.
   OSV.dev still supplies the advisories; CocoaPods, which it does not cover,
   gets them from Trivy's database, downloaded only for repos that have a
   `Podfile.lock`. Without Trivy the Desk's own readers run, and any other
@@ -86,4 +88,10 @@ the move from the old names.
   advisories and team-rule patterns are still not second-guessed.
 - **Weekly secret scan.** Each full deep audit runs Gitleaks over the whole
   default branch. The audit's second pass checks every hit before anyone is
-  alerted. A scan that could not run is a coverage problem.
+  alerted. A scan that could not run is a coverage problem: a Gitleaks that
+  exits with an error or prints nothing is "not checked", never "no secrets".
+- **`.gitleaksignore` can't hide a secret.** A repo's own `.gitleaksignore`
+  still applies to Gitleaks, so the whole-repo scan reports each entry it
+  lists as a secret, marked as hidden, for the second pass to judge. A pull
+  request is scanned without its `.gitleaksignore`, and one that edits the
+  file is flagged at the top of the review.

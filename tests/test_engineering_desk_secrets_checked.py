@@ -128,3 +128,80 @@ def test_in_the_sample_a_missing_gitleaks_is_a_note_and_the_audit_still_runs(hub
     store = h.lib(hub).store.Store(hub / ".hubzoid" / "data")
     assert not any(c["check_name"] == "secret scan" and c["last_error"] for c in store.coverage([REPO]))
     assert r.value["audited"] and r.emails == []
+
+
+# ------------------------------------------- a scan that cannot stay silent
+
+@pytest.mark.parametrize("script", ["exit 1", "exit 126", "exit 0"])  # an error, a bad flag, a crash with no output
+def test_a_failing_gitleaks_is_not_checked_never_clean(tmp_path, script):
+    exe = tmp_path / "gitleaks"
+    exe.write_text(f"#!/bin/sh\necho 'FTL something broke' >&2\n{script}\n")
+    exe.chmod(0o755)
+    with pytest.raises(gz.checks.ScanError, match="Gitleaks failed"):
+        gz.checks.secret_scan(tmp_path, str(exe))
+
+
+def _gitleaks_fingerprint(gitleaks: str, root, history: bool) -> str:
+    import subprocess
+    out = subprocess.run([gitleaks, "git" if history else "dir", str(root), "--report-format", "json",
+                          "--report-path", "-", "--no-banner", "--exit-code", "0"], capture_output=True, text=True)
+    return json.loads(out.stdout)[0]["Fingerprint"]
+
+
+@pytest.mark.skipif(shutil.which("gitleaks") is None, reason="gitleaks binary not installed")
+@pytest.mark.parametrize("history", [False, True])
+def test_a_repos_own_gitleaksignore_cannot_hide_a_secret(tmp_path, history):
+    import subprocess
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app/config.py").write_text(f'GITHUB_TOKEN = "{_token(8)}"\n')
+    if history:
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"],
+                       check=True)
+    gitleaks = shutil.which("gitleaks")
+    (tmp_path / ".gitleaksignore").write_text(_gitleaks_fingerprint(gitleaks, tmp_path, history) + "\n")
+    hits = gz.checks.secret_scan(tmp_path, gitleaks, history=history)
+    assert [(x["path"], x["line"], x["rule"], x.get("hidden")) for x in hits] == [("app/config.py", 1, "github-pat", True)]
+    [finding] = gz.audit.secret_findings(hits)
+    assert "hidden from Gitleaks by the repo's .gitleaksignore" in finding["body"]
+
+
+def test_gitleaksignore_entries_are_read_in_both_forms(tmp_path):
+    (tmp_path / "a.py").write_text("x\n")
+    (tmp_path / ".gitleaksignore").write_text(
+        "# reviewed\n" f"{tmp_path}/a.py:generic-api-key:3\n" "1a2fc331dc05e8eff9ee15267ac106ba72388618:b/c.py:github-pat:9\n"
+        "not an entry\n" "/elsewhere/x.py:rule:1\n")
+    assert gz.checks.gitleaks_ignored(tmp_path) == [
+        {"path": "a.py", "line": 3, "rule": "generic-api-key", "commit": "", "hidden": True},
+        {"path": "b/c.py", "line": 9, "rule": "github-pat", "commit": "1a2fc331dc05", "hidden": True}]
+
+
+@pytest.mark.skipif(shutil.which("gitleaks") is None, reason="gitleaks binary not installed")
+def test_a_pull_request_that_adds_a_gitleaksignore_still_has_its_secret_flagged(tmp_path, monkeypatch):
+    import os
+    monkeypatch.setenv("ENGINEERING_DESK_SCANNERS", str(tmp_path / "no-pinned-builds"))
+    fixed = tmp_path / "scan"  # the scan folder, known in advance, so the entry is the exact fingerprint
+
+    class Folder:
+        def __init__(self, **kwargs):
+            fixed.mkdir(exist_ok=True)
+
+        def __enter__(self):
+            return str(fixed)
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(gz.checks.tempfile, "TemporaryDirectory", Folder)
+    entry = f"{os.path.realpath(fixed)}/source/app/sync.py:github-pat:1"
+    token = _token(9)
+    body = {"app/sync.py": f'TOKEN = "{token}"\n', ".gitleaksignore": entry + "\n"}
+    files = [{"filename": n, "status": "added", "patch": "@@ -0,0 +1 @@\n+" + t.rstrip("\n")} for n, t in body.items()]
+    analyzers = [{"name": "gitleaks", "run": ["gitleaks", *gz.checks.SAFE_RUNS["gitleaks"]]}]
+    checks, notes = gz.checks.run_analyzers(files, body.get, analyzers, download=False)
+    assert [(c["path"], c["line"], c["secret"]) for c in checks] == [("app/sync.py", 1, True)]
+    assert any(n.startswith("gitleaks: this change edits .gitleaksignore") for n in notes)
+    view = {"open": [], "risk": "low", "sha": "abc1234", "reviewed_files": 2, "total_files": 2, "notes": notes,
+            "verdict": "looks_good"}
+    assert "This change edits `.gitleaksignore`" in gz.review.summary(view, {}, False)
