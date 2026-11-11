@@ -230,6 +230,11 @@ CHECKS = [("secret scan", "Secrets", "Gitleaks over the whole repo"),
           ("first look", "Code: first look", "the riskiest files only, capped at a few minutes")]
 
 
+# Part of the repo page's digest: raise it when the page's layout or wording
+# changes, so an update redraws pages whose data did not change.
+PAGE_VERSION = 2
+
+
 def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], notes: list[str] = (),
               verified: bool = True, previews: list[dict] = ()) -> str:
     """One page per repo, behind one link that always shows the latest run:

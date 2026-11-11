@@ -108,3 +108,16 @@ def test_update_now_rescans_secrets_and_dependencies(hub):
     update = h.run_local(check, hub_dir=hub, trigger="update")
     page = next(a for a in update.artifacts if (a.get("key") or "").startswith("repo-"))
     assert update.value["rescanned"] is True and "pyyaml" in page["html"].lower()
+
+
+def test_a_new_page_layout_redraws_an_unchanged_page(hub, monkeypatch):
+    """Seen end to end: after an update, a page whose data had not changed kept
+    its old layout, because the digest covered only the data."""
+    check = h.wf(hub, "check_repo")
+    h.run_local(check, hub_dir=hub, trigger="schedule")
+    first = h.run_local(check, hub_dir=hub, trigger="schedule")
+    same = h.run_local(check, hub_dir=hub, trigger="schedule")
+    digest = lambda r: next(a for a in r.artifacts if (a.get("key") or "").startswith("repo-"))["digest"]
+    assert digest(first) == digest(same)
+    monkeypatch.setattr(h.lib(hub).render, "PAGE_VERSION", h.lib(hub).render.PAGE_VERSION + 1)
+    assert digest(h.run_local(check, hub_dir=hub, trigger="schedule")) != digest(first)

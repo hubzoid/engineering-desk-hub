@@ -669,7 +669,7 @@ def publish_repo_page(repo: str, notes: list[str] | None = None, previews: list[
     data = ([{k: v for k, v in r.items() if k not in ("last_seen", "alerted_at")} for r in rows],
             [(c["check_name"], bool(c.get("last_ok")), c.get("last_error")) for c in coverage], notes, previews)
     art = gz.runtime.publish(hub, f"repo-{repo}", html, f"{repo} · repo check", key=repo_page_key(repo),
-                             team_audience="hub", digest=gz.runtime.digest_of(*data))
+                             team_audience="hub", digest=gz.runtime.digest_of(gz.render.PAGE_VERSION, *data))
     link = gz.runtime.link_of(art)
     if hub.team_run and link:
         # A run from chat can only write the person's own copy; the team's copy
