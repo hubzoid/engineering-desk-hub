@@ -90,23 +90,31 @@ the move from the old names.
 - **Local folders.** `source: local` with a `path:` per repo checks git
   working copies on this machine, with no GitHub token: what git tracks at
   the current commit (never ignored files such as `.env`), and the whole
-  history for secrets. Pull request reviews and reports need GitHub.
+  history for secrets. Pull request reviews and reports need GitHub. A fresh
+  clone starts here (`source: local`, no folder yet), so the first step is
+  choosing a folder, not adding a token.
 - **Repo page.** One page per repo, behind one link that always shows the
   latest run: secrets with file and line, vulnerable packages and whether
   the code uses them, the top code findings (each double-checked), and
   what was checked and what was not. The security watch and the deep audit
   refresh it after each repo; a page whose data did not change stores no
-  new copy.
+  new copy. Secrets the second pass judged not real are listed, folded
+  away, with its reason, and secrets a repo's `.gitleaksignore` hides are
+  shown and counted.
 - **Check my repo** (`check_repo`, in chat and Runs): a first result on your
   own code in minutes. Secrets and dependencies first, on the repo page at
   once; then a first look at the riskiest code, capped at a few minutes,
   each finding double-checked; then previews of the newest pull requests,
   only with GitHub connected and publishing in preview. Nothing is posted
-  and no one is emailed. The digest is not part of a first run.
+  and no one is emailed: what it finds is saved unalerted, so the next
+  security watch or audit emails it once. The digest is not part of a first
+  run. Its answer gives the page's numbers, with what is new beside them.
 - **Get started cards.** A new chat shows the owner and admins four cards,
   from `get-started.yaml`: Model, Code, GitHub and Automatic checks. Each
-  says whether its step is done and, if not, what to do; GitHub shows as
-  "later", not a failure, when the code is a local folder. The doctor
+  says whether its step is done and, if not, what to do: Code needs you
+  until a folder is chosen that git can read, and Automatic checks says
+  "Nothing to run yet" until a repo has reviews or security on. GitHub shows
+  as "Not needed yet", not a failure, when the code is a local folder. The doctor
   checks return each card's line. The chat suggests "Check my repo", "What
   is waiting or stuck right now?" and "See a sample review", and walks the
   same four steps, never asking for a secret. Needs Hubzoid 2.0.8.

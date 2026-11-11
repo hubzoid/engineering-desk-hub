@@ -701,14 +701,17 @@ def ignore(store, repo: str, item: dict, reason: str, stamp: str) -> None:
 
 
 def reconcile(store, repo: str, items: list[dict], stamp: str, complete: bool = True,
-              skipped_files=()) -> dict:
+              skipped_files=(), alerted: bool = True) -> dict:
     """Compare today's advisories for one repo with the ledger. Returns the
     new, escalated and resolved entries. Assessed-unreachable ones are kept
     as 'ignored' and come back only if they escalate. Nothing is resolved
     after an incomplete scan (a lockfile that could not be read, or too many
     to read): a missing advisory then means "not checked", not "fixed". An
-    open entry whose alert was never delivered is alerted again."""
+    open entry whose alert was never delivered is alerted again. With
+    `alerted` off (a run that sends no email), new and escalated entries are
+    saved unalerted, so the next watch emails them once."""
     out = {"new": [], "escalated": [], "resolved": []}
+    sent = stamp if alerted else None
     seen = set()
     for item in items:
         key = ledger_key(repo, item)
@@ -721,7 +724,8 @@ def reconcile(store, repo: str, items: list[dict], stamp: str, complete: bool = 
                       path=item["dep"]["file"], last_seen=stamp, assessment_fp=item.get("assessment_fp"))
         if row is None or row["state"] in ("resolved", "skipped") or (row["state"] == "open" and not row["alerted_at"]):
             store.save_ledger(key, **fields, state="open", first_seen=(row or {}).get("first_seen") or stamp,
-                              alerted_at=stamp, alerted_severity=item["severity"], alerted_kev=int(kev))
+                              alerted_at=sent, alerted_severity=item["severity"] if sent else None,
+                              alerted_kev=int(kev) if sent else 0)
             out["new"].append({**fields, "key": key, "url": item["url"]})
             continue
         worse = _worse(item, row)
@@ -729,8 +733,8 @@ def reconcile(store, repo: str, items: list[dict], stamp: str, complete: bool = 
             store.save_ledger(key, last_seen=stamp)
             continue
         if worse or row["state"] == "ignored":
-            store.save_ledger(key, **fields, state="open", alerted_at=stamp, alerted_severity=item["severity"],
-                              alerted_kev=int(kev))
+            store.save_ledger(key, **fields, state="open", alerted_at=sent,
+                              alerted_severity=item["severity"] if sent else None, alerted_kev=int(kev) if sent else 0)
             out["escalated"].append({**fields, "key": key, "url": item["url"]})
         else:
             store.save_ledger(key, **fields)

@@ -778,11 +778,12 @@ def judge_dependencies(settings, repo: str, s: dict) -> tuple[list[dict], list[d
 
 
 def record_dependencies(repo: str, items: list[dict], ignored: list[dict], stamp: str, clean: bool, complete: bool,
-                        skipped_files=()) -> dict:
+                        skipped_files=(), alerted: bool = True) -> dict:
     store = gz.store.Store(hub.data_dir)
     for it in ignored:
         gz.security.ignore(store, repo, it, it.get("impact") or "judged not reachable from this code", stamp)
-    changes = gz.security.reconcile(store, repo, items, stamp, complete=complete, skipped_files=set(skipped_files))
+    changes = gz.security.reconcile(store, repo, items, stamp, complete=complete, skipped_files=set(skipped_files),
+                                    alerted=alerted)
     if clean:
         store.coverage_ok(repo, "dependencies")
         store.coverage_ok(repo, "lockfiles")
@@ -814,23 +815,28 @@ def secret_sweep(repo: str) -> dict:
     return {"findings": found, "batch": gz.audit.windows_around(root, found)}
 
 
-def verify_secrets(settings, repo: str, profile_text: str, sweep: dict) -> tuple[list[dict], int]:
-    """The audit's second pass over the secret scan's hits: (kept, refuted count).
-    Unverified secrets are kept: an alert is safer than silence."""
+def verify_secrets(settings, repo: str, profile_text: str, sweep: dict) -> tuple[list[dict], list[dict]]:
+    """The audit's second pass over the secret scan's hits: (kept, refuted),
+    each refuted one with its reason. Unverified secrets are kept: an alert is
+    safer than silence."""
     found = sweep.get("findings") or []
     if not found or not settings.audit.verify or charge(1):
-        return found, 0
+        return found, []
     try:
         checked = ask(gz.audit.verify_prompt(repo, profile_text, found, [tuple(b) for b in sweep["batch"]]),
                       system=gz.review.VERIFY_SYSTEM, response_model=gz.models.Verification,
                       model=settings.audit.model, timeout=600)
     except Unreadable:
-        return found, 0
-    kept, refuted = gz.audit.apply_verdicts(found, [v.model_dump() for v in checked.verdicts])
-    return kept, len(refuted)
+        return found, []
+    return gz.audit.apply_verdicts(found, [v.model_dump() for v in checked.verdicts])
 
 
-def record_secrets(repo: str, findings: list[dict], stamp: str) -> list[dict]:
+def record_secrets(repo: str, findings: list[dict], stamp: str, refuted: list[dict] | None = None,
+                   alerted: bool = True) -> list[dict]:
+    """Save one whole-repo secret scan: the kept secrets (new ones returned for
+    alerts), then the refuted ones with their reasons."""
     store = gz.store.Store(hub.data_dir)
     root = gz.checkout.path_for(hub.data_dir, repo)
-    return gz.audit.record(store, repo, findings, sorted({f["path"] for f in findings}), root, stamp)
+    new = gz.audit.record(store, repo, findings, sorted({f["path"] for f in findings}), root, stamp, alerted=alerted)
+    gz.audit.record_refuted(store, repo, refuted or [], stamp)
+    return new
