@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from tests import engineering_desk_harness as h
 from tests.engineering_desk_harness import template_lib
 
 gz = template_lib()
@@ -210,3 +211,46 @@ def test_a_secret_scanner_that_did_not_run_is_said_at_the_top():
     warning = next(i for i, l in enumerate(lines) if "The secret scanner did not run" in l)
     assert warning < next(i for i, l in enumerate(lines) if l.startswith("## 📝 Summary"))
     assert "Engineering Desk's own patterns only" in lines[warning]
+
+
+# Real Trivy 0.76.1 output (trivy fs --offline-scan --format cyclonedx), saved
+# from an npm, a Poetry and a Cargo project; not written by hand.
+REAL = h.TEMPLATE / "tests" / "fixtures" / "trivy"
+
+
+@pytest.mark.parametrize("project, packages", [("npm", 50), ("poetry", 5), ("cargo", 57)])
+def test_indirect_packages_are_listed_too(project, packages, monkeypatch, tmp_path):
+    """npm install --package-lock-only for express 4.17.1 locks 50 packages;
+    requests 2.19.0 with Poetry locks 5; ripgrep 14.1.0's Cargo.lock has 57.
+    A file names only its direct packages: the rest are found through them."""
+    sbom = json.loads((REAL / f"{project}.cdx.json").read_text())
+    monkeypatch.setattr(gz.security, "_trivy", lambda *a, **k: sbom)
+    deps = gz.security.trivy_dependencies(tmp_path, "trivy", tmp_path / "db")
+    assert len(deps) == packages
+    assert len({(d["name"], d["version"]) for d in deps}) == packages
+    assert all(d["file"] in ("package-lock.json", "poetry.lock", "Cargo.lock") for d in deps)
+
+
+def test_a_vulnerable_indirect_package_is_reported(monkeypatch, tmp_path):
+    """qs 6.7.0 comes in through express, and has CVE-2022-24999 (OSV.dev's
+    records, saved as they were served)."""
+    sbom = json.loads((REAL / "npm.cdx.json").read_text())
+    monkeypatch.setattr(gz.security, "_trivy", lambda *a, **k: sbom)
+    deps = gz.security.trivy_dependencies(tmp_path, "trivy", tmp_path / "db")
+    assert {"ecosystem": "npm", "name": "qs", "version": "6.7.0", "file": "package-lock.json"} in deps
+    found = gz.security.Feeds(sample_dir=REAL / "osv").advisories(deps)
+    qs = [a for a in found if a["dep"]["name"] == "qs"]
+    assert qs and any("CVE-2022-24999" in a["cves"] for a in qs)
+
+
+def test_a_package_no_file_reaches_is_kept_not_dropped(monkeypatch, tmp_path):
+    sbom = {"components": [
+        {"bom-ref": "f1", "type": "application", "name": "package-lock.json",
+         "properties": [{"name": "aquasecurity:trivy:Type", "value": "npm"}]},
+        {"bom-ref": "pkg:npm/a@1.0.0", "type": "library", "purl": "pkg:npm/a@1.0.0"},
+        {"bom-ref": "pkg:npm/loose@2.0.0", "type": "library", "purl": "pkg:npm/loose@2.0.0",
+         "properties": [{"name": "aquasecurity:trivy:PkgType", "value": "npm"}]}],
+        "dependencies": [{"ref": "f1", "dependsOn": ["pkg:npm/a@1.0.0"]}, {"ref": "pkg:npm/a@1.0.0", "dependsOn": []}]}
+    monkeypatch.setattr(gz.security, "_trivy", lambda *a, **k: sbom)
+    deps = gz.security.trivy_dependencies(tmp_path, "trivy", tmp_path / "db")
+    assert [(d["name"], d["file"]) for d in deps] == [("a", "package-lock.json"), ("loose", "package-lock.json")]

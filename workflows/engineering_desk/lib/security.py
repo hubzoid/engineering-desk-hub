@@ -308,19 +308,51 @@ def trivy_dependencies(root: Path, trivy: str, cache: Path, exclude: list[str] =
     """Every pinned package in every dependency file Trivy reads (Swift,
     CocoaPods, Maven, NuGet, Dart and the rest), listed without its
     vulnerability database: seconds, and no download. Vendored, test and
-    excluded folders are left out as in `manifest_files`."""
+    excluded folders are left out as in `manifest_files`.
+
+    A file lists only its direct packages; the indirect ones hang off those,
+    so each file's graph is walked to the end. A package no file reaches is
+    kept under the file of its type, never dropped."""
+    from collections import deque
     sbom = _trivy(trivy, Path(root), cache, ["--format", "cyclonedx"], timeout)
-    files = {c.get("bom-ref"): c.get("name") for c in sbom.get("components") or [] if c.get("type") == "application"}
-    deps, seen = [], set()
-    for edge in sbom.get("dependencies") or []:
-        rel = files.get(edge.get("ref"))
-        if not rel or not _kept(rel, list(exclude), skipped):
+    comps = {c.get("bom-ref"): c for c in sbom.get("components") or []}
+    files = {ref: c.get("name") for ref, c in comps.items() if c.get("type") == "application" and c.get("name")}
+    graph = {e.get("ref"): e.get("dependsOn") or [] for e in sbom.get("dependencies") or []}
+    deps, seen, reached = [], set(), set()
+
+    def add(ref: str, rel: str) -> None:
+        purl = (comps.get(ref) or {}).get("purl") or (ref if str(ref).startswith("pkg:") else "")
+        dep = purl_dep(purl)
+        if dep and dep not in seen:
+            seen.add(dep)
+            deps.append({"ecosystem": dep[0], "name": dep[1], "version": dep[2], "file": rel})
+
+    for file_ref, rel in files.items():
+        kept = _kept(rel, list(exclude), skipped)
+        queue, visited = deque(graph.get(file_ref, [])), set()
+        while queue:
+            ref = queue.popleft()
+            if ref in visited:
+                continue
+            visited.add(ref)
+            reached.add(ref)
+            if kept:
+                add(ref, rel)
+            queue.extend(graph.get(ref, []))
+
+    def prop(c: dict, name: str) -> str:
+        return next((x.get("value", "") for x in c.get("properties") or [] if x.get("name") == name), "")
+
+    by_type: dict[str, list[str]] = {}
+    for ref, rel in files.items():
+        by_type.setdefault(prop(comps[ref], "aquasecurity:trivy:Type"), []).append(rel)
+    for ref, c in comps.items():
+        if c.get("type") != "library" or ref in reached:
             continue
-        for purl in edge.get("dependsOn") or []:
-            dep = purl_dep(purl)
-            if dep and dep not in seen:
-                seen.add(dep)
-                deps.append({"ecosystem": dep[0], "name": dep[1], "version": dep[2], "file": rel})
+        rels = sorted(by_type.get(prop(c, "aquasecurity:trivy:PkgType"), []))
+        if len(rels) == 1 and not _kept(rels[0], list(exclude), None):
+            continue
+        add(ref, rels[0] if len(rels) == 1 else ", ".join(rels) or "a dependency file")
     return deps
 
 

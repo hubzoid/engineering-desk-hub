@@ -1,0 +1,9 @@
+{
+ "npm/qs@6.7.0": [
+  "GHSA-4mjr-xmp4-gh2g",
+  "GHSA-6pq8-jhm2-2vcw",
+  "GHSA-6rw7-vpxm-498p",
+  "GHSA-hrpp-h998-j3pp",
+  "GHSA-w7fw-mjwx-w883"
+ ]
+}
