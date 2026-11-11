@@ -69,3 +69,16 @@ def test_running_the_check_twice_leaves_one_link_with_the_newer_result(hub):
     assert "pyyaml" in pages[1]["html"].lower() and "Vulnerable packages" in pages[1]["html"]
     keys = {h.flow(hub).repo_page_key(r) for r in ("a/b", "a-b/c", "A/B")}
     assert len(keys) == 3 and all(k.startswith("repo-") and k == k.lower() for k in keys)
+
+
+def test_a_new_page_layout_redraws_an_unchanged_page(hub, monkeypatch):
+    """Seen end to end: after an update, a page whose data had not changed kept
+    its old layout, because the digest covered only the data."""
+    check = h.wf(hub, "check_repo")
+    h.run_local(check, hub_dir=hub, trigger="schedule")
+    first = h.run_local(check, hub_dir=hub, trigger="schedule")
+    same = h.run_local(check, hub_dir=hub, trigger="schedule")
+    digest = lambda r: next(a for a in r.artifacts if (a.get("key") or "").startswith("repo-"))["digest"]
+    assert digest(first) == digest(same)
+    monkeypatch.setattr(h.lib(hub).render, "PAGE_VERSION", h.lib(hub).render.PAGE_VERSION + 1)
+    assert digest(h.run_local(check, hub_dir=hub, trigger="schedule")) != digest(first)
