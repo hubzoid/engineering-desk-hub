@@ -309,7 +309,8 @@ def check_repo():
     out["answer"] = (f"Checked {repo}: {count(out['secrets'], 'secret')}, "
                      f"{count(dep_summary.get('vulnerable', 'not checked'), 'vulnerable package')}, "
                      f"{count(out['code_findings'], 'code finding')} ({out['new_code_findings']} new from a first "
-                     f"look at {out['first_look']}). Your copy of the page has the details: {page}"
+                     f"look at {out['first_look']}). {'The team page' if hub.team_run else 'Your copy of the page'} "
+                     f"has the details: {page}"
                      + (f" The team page, updated daily: {team}" if team else
                         " The team page appears after the daily 07:30 refresh." if not hub.team_run else "")
                      + (f" Not checked: {'; '.join(notes)}." if notes else ""))
