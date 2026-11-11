@@ -264,9 +264,10 @@ def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], not
         [r.get("path") or "", r.get("line") or "", r.get("title") or "", "Rotate it, then load it from the environment"]
         for r in secrets]) if ran("secret scan") else "<p class=\"meta warn\">Not checked yet.</p>"))
     hidden = [r for r in secrets if "hidden from Gitleaks by the repo's .gitleaksignore" in (r.get("title") or "")]
-    if hidden:
-        body.append(f'<p class="meta warn">{len(hidden)} hidden by the repo\'s .gitleaksignore, and shown here '
-                    "anyway: check why each is listed there.</p>")
+    hidden_note = (f'<p class="meta warn">{len(hidden)} hidden by the repo\'s .gitleaksignore, and shown here '
+                   "anyway: check why each is listed there.</p>") if hidden else ""
+    if hidden_note:
+        body.append(hidden_note)
     if refuted:
         body.append(f"<details><summary>Judged not a real secret ({len(refuted)})</summary>"
                     + table(["File", "Line", "Why the second pass dropped it"],
