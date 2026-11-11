@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import github as github_mod
+from .local import LocalRepos
 from .sample import SampleGitHub
 from .security import Feeds
 from .store import Store
@@ -28,6 +29,8 @@ def sample_root(hub_dir: Path) -> Path:
 def make_github(settings, store: Store | None, hub_dir: Path, token: str | None = None, transport=None, secrets: dict | None = None):
     if settings.source == "sample":
         return SampleGitHub(sample_root(hub_dir))
+    if settings.source == "local":
+        return LocalRepos(settings.folders())
     token = token if token is not None else os.environ.get("GITHUB_TOKEN", "")
     credentials = secrets if secrets is not None else os.environ
     app = None

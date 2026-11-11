@@ -65,7 +65,7 @@ cp .env.example .env
 
 `.env` uses Claude Code (`MODEL=claude-local`). For Codex, set `MODEL=codex-local`.
 
-In `workflows/settings.yaml`, change `source: github` to `source: sample`. Then give yourself, the local owner, the chat tools and the delivery report, and start:
+To try the fictional sample, in `workflows/settings.yaml` change `source: local` to `source: sample`. Then give yourself, the local owner, the chat tools and the delivery report, and start:
 
 ```bash
 hubzoid grant admin@localhost engineering_desk .
@@ -79,6 +79,24 @@ Open the address `hubzoid run` prints. Within two minutes the desk reviews the f
 
 Then ask *"Show the findings on storefront PR 102 with fix prompts."* You see each finding with a prompt you can hand to your own coding assistant to fix it. [Full setup](SETUP.md)
 
+### Your own code, in minutes
+
+A new chat shows four Get started cards (Model, Code, GitHub, Automatic checks), each saying whether it is done and what to do if not. A fresh clone starts on a folder of your own (`source: local`), with no token. Set its `path:` in `workflows/settings.yaml`, or ask your coding agent to:
+
+```yaml
+engineering_desk:
+  version: 2
+  source: local
+  repos:
+    - name: me/ios-app
+      path: ~/code/ios-app
+      security: true
+```
+
+Then ask *"Check my repo"*. Secrets and vulnerable dependencies are on the repo page within a minute, and a first look at the riskiest code follows within a few more, each finding double-checked. Nothing is posted anywhere.
+
+**Then GitHub, for pull request reviews.** Add a fine-grained, read-only GitHub token to `.env` yourself, never in chat ([SETUP.md](SETUP.md), step 2, keeps it off your screen and out of your shell history). List your repositories in `workflows/settings.yaml` with `source: github`, then run `hubzoid hub doctor .` and `hubzoid run .`. Or ask your coding assistant to follow [SETUP.md](SETUP.md).
+
 ## Integrations
 
 | Works with | What the desk does |
@@ -87,8 +105,6 @@ Then ask *"Show the findings on storefront PR 102 with fix prompts."* You see ea
 | GitHub's MCP server, read only | Gives chat issues, pull requests, Actions runs and logs, releases and branches, for any repository the token can read. It never writes. |
 | The web chat, and Claude Code over MCP | Answers questions about your code. Its own tools answer signed-in people only. |
 | Email | Sends reports and the weekly digest to a list, if you add one. |
-
-Ready for your own repositories? Add a fine-grained, read-only GitHub token to `.env` yourself, never in chat ([SETUP.md](SETUP.md), step 2, keeps it off your screen and out of your shell history). List your repositories in `workflows/settings.yaml` with `source: github`, then run `hubzoid hub doctor .` and `hubzoid run .`. Or ask your coding assistant to follow [SETUP.md](SETUP.md).
 
 ## Make it yours
 

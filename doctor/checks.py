@@ -43,7 +43,7 @@ def _env(hub_dir: Path) -> dict:
     return {**os.environ, **{k: v for k, v in dotenv_values(hub_dir / ".env").items() if v is not None}}
 
 
-def settings(context) -> dict:
+def _settings_row(context) -> dict:
     """workflows/settings.yaml is valid, and what each repo has on."""
     hub_dir = Path(context["hub_dir"])
     lib = _settings(hub_dir)
@@ -59,15 +59,41 @@ def settings(context) -> dict:
         return _row("warn", f"Settings without a version: all {len(s.repos)} repos have reviews, security and reports on.",
                     "Add version: 2 and turn on reviews, security or reports per repo (UPGRADING.md).")
     if not s.repos:
-        return _row("info", "Engineering Desk is not watching any repo yet. Chat can still read what the token can.",
-                    "Add repos under repos: in workflows/settings.yaml (SETUP.md, step 3).")
+        return _row("warn", "Engineering Desk is not watching any code yet.",
+                    "Add a folder or repos under repos: in workflows/settings.yaml (SETUP.md, step 2).")
+    if s.source == "local":
+        for r in s.repos:
+            problem = _folder_problem(r.path)
+            if problem:
+                return _row("warn", f"{r.name}: {problem} at {r.path}.",
+                            "Set path: to a git working copy in workflows/settings.yaml.",
+                            details={"repo": r.name, "path": r.path, "problem": problem})
     on = {r.name: [k for k, v in s.switches(r.name).items() if v] for r in s.repos}
     summary = "; ".join(f"{name}: {', '.join(v) or 'chat only'}" for name, v in on.items())
-    return _row("ok", f"{'Sample' if s.source == 'sample' else 'GitHub'}, {mode}. {summary}.",
+    where = {"sample": "Sample", "local": "Local folders"}.get(s.source, "GitHub")
+    return _row("ok", f"{where}, {mode}. {summary}.",
                 details={"publishing": mode, "repos": on})
 
 
-def schedules(context) -> dict:
+def _folder_problem(path: str | None) -> str:
+    """Why a local folder can't be read, or "" when git has a commit there."""
+    import subprocess
+    folder = Path(os.path.expanduser(path or ""))
+    if not path or not folder.is_dir():
+        return "Folder not found"
+    try:
+        head = subprocess.run(["git", "-C", str(folder), "rev-parse", "--verify", "--quiet", "HEAD"],
+                              capture_output=True, text=True, timeout=5)
+        top = subprocess.run(["git", "-C", str(folder), "rev-parse", "--is-inside-work-tree"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return "Not a git repo"
+    if top.stdout.strip() != "true":
+        return "Not a git repo"
+    return "" if head.returncode == 0 else "No commit yet"
+
+
+def _schedules_row(context) -> dict:
     """Scheduled work (sweeps, watch, digests) runs only with schedules on."""
     hub_dir = Path(context["hub_dir"])
     from hubzoid.workflows.boot import schedules_enabled
@@ -93,7 +119,7 @@ def scanners(context) -> dict:
     return _row("ok" if all(t.ready for t in tools) else "info", summary, details=details)
 
 
-def github(context) -> dict:
+def _github_row(context) -> dict:
     """The token reads each listed repo (one GET per repo, nothing written)."""
     hub_dir = Path(context["hub_dir"])
     lib = _settings(hub_dir)
@@ -103,6 +129,8 @@ def github(context) -> dict:
         return _row("info", "Skipped until workflows/settings.yaml is valid.")
     if s.source == "sample":
         return _row("info", "Sample mode: no GitHub access is needed.")
+    if s.source == "local":
+        return _row("info", "Local folders: no GitHub access is needed. Connect GitHub only for pull request reviews.")
     env = _env(hub_dir)
     if env.get("GITHUB_APP_ID"):
         return _row("info", "A GitHub App is set. Run hubzoid schedule run . setup_check to test each repo.")
@@ -143,3 +171,99 @@ def github(context) -> dict:
         return _row("warn", f"The token reads the first {LIMIT} of {len(names)} listed repos. The rest were not checked.",
                     "Run hubzoid schedule run . setup_check to check every repo.")
     return _row("ok", f"The token reads all {len(ok)} listed repos.")
+
+
+# ------------------------------------------------------------ get started cards
+# get-started.yaml at the hub root shows four cards for the owner and admins:
+# Model (built into Hubzoid), Code, GitHub and Automatic checks. Each check
+# below also returns the card's short line (60 characters) and detail (80):
+# what is set, or what to do. Status and next step only: no buttons.
+
+def _card(row: dict, line: str, detail: str) -> dict:
+    return {**row, "card": {"line": line[:60], "detail": detail[:80]}}
+
+
+def _read(hub_dir: Path):
+    lib = _settings(hub_dir)
+    try:
+        return lib.read_file(hub_dir)[0]
+    except lib.SettingsError:
+        return None
+
+
+def _short_path(path: str, room: int) -> str:
+    """A folder as a card line: ~ for home, and the end kept when it is long."""
+    home = str(Path.home())
+    text = path.replace(home, "~", 1) if path.startswith(home) else path
+    if len(text) <= room:
+        return text
+    tail = text[-(room - 2):]
+    return "…/" + tail.split("/", 1)[-1] if "/" in tail else "…" + text[-(room - 1):]
+
+
+def _branch(path: str) -> str:
+    import subprocess
+    try:
+        out = subprocess.run(["git", "-C", os.path.expanduser(path), "symbolic-ref", "--quiet", "--short", "HEAD"],
+                             capture_output=True, text=True, timeout=3).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return out
+
+
+def settings(context) -> dict:
+    """workflows/settings.yaml is valid, and what each repo has on. The Code card."""
+    hub_dir = Path(context["hub_dir"])
+    row = _settings_row(context)
+    s = _read(hub_dir)
+    if s is None or row["status"] == "fail":
+        return _card(row, "Settings need a fix", "Run hubzoid hub doctor . to see which key")
+    if not s.repos:
+        if s.source == "github":
+            return _card(row, "Not chosen yet", "Add repos: in workflows/settings.yaml, or ask your coding agent")
+        return _card(row, "Choose a folder", "Set path: in workflows/settings.yaml, or ask your coding agent")
+    if s.source == "sample":
+        return _card(row, "The fictional sample repo", "Set source: local and a path: to check your own code")
+    more = f" and {len(s.repos) - 1} more" if len(s.repos) > 1 else ""
+    if s.source == "local":
+        if row["status"] == "warn" and row.get("details", {}).get("problem"):
+            d = row["details"]
+            return _card(row, d["problem"], _short_path(d["path"], 80))
+        first = s.repos[0]
+        branch = _branch(first.path)
+        return _card(row, _short_path(first.path, 60 - len(more)) + more, f"Branch {branch}" if branch else "Local folder")
+    return _card(row, f"{s.repos[0].name}{more}", "On GitHub")
+
+
+def github(context) -> dict:
+    """The token reads each listed repo (one GET per repo, nothing written). The GitHub card."""
+    hub_dir = Path(context["hub_dir"])
+    row = _github_row(context)
+    s = _read(hub_dir)
+    if s is not None and s.source in ("sample", "local"):
+        # Not a failure: GitHub is only needed for pull request reviews.
+        return _card(row, "Not needed yet", "Only for PR reviews")
+    if row["status"] == "ok":
+        return _card(row, "Connected", row["summary"])
+    if row["status"] == "fail" and "No GitHub token" in row["summary"]:
+        return _card(row, "Not connected", "Add GITHUB_TOKEN to .env (SETUP.md, step 2)")
+    return _card(row, "Needs attention", row.get("recovery") or row["summary"])
+
+
+def schedules(context) -> dict:
+    """Scheduled work (sweeps, watch, digests) runs only with schedules on. The Automatic checks card."""
+    hub_dir = Path(context["hub_dir"])
+    row = _schedules_row(context)
+    s = _read(hub_dir)
+    on = {k for r in (s.repos if s else []) for k, v in s.switches(r.name).items() if v} if s else set()
+    if s is not None and not on & {"reviews", "security"}:
+        return _card({**row, "status": "warn", "summary": "Nothing is set to run: no repo has reviews or security on.",
+                      "recovery": "Choose your code first (the Code card), with reviews or security on."},
+                     "Nothing to run yet", "Choose your code first: see the Code card")
+    if row["status"] != "ok":
+        return _card(row, "Off", "Add HUBZOID_SCHEDULES=1 to .env and restart")
+    if on >= {"reviews", "security"}:
+        return _card(row, "Reviews and security watch on", "Reviews every 2 minutes, security daily")
+    if "reviews" in on:
+        return _card(row, "Reviews on", "Pull requests every 2 minutes")
+    return _card(row, "Security watch and audit on", "Dependencies daily, the audit and secret scan weekly")

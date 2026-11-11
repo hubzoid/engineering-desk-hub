@@ -53,77 +53,13 @@ def security_plan() -> dict:
 def scan(repo: str) -> dict:
     """Advisories for one repo that pass the feed gate, with where the code
     imports each package. Raises nothing: a failure is a coverage problem."""
-    settings, store, gh = flow.ctx()
-    feeds = gz.runtime.make_feeds(settings, flow.HUB_DIR)
-    notes = []
-    try:
-        root, sha = gz.checkout.ensure(gh, repo, hub.data_dir)
-        skipped: list[str] = []
-        manifests, all_listed = gz.security.manifest_files(root, exclude=settings.exclude_for(repo), skipped=skipped)
-        # The sample is offline and fixed: it keeps the Desk's own readers.
-        trivy = gz.scanners.find("trivy") if settings.source != "sample" else None
-        cache = gz.scanners.cache_dir() / "trivy-data"
-        deps, problems, read_with = gz.security.list_dependencies(
-            root, manifests, trivy.path if trivy else None, cache, exclude=settings.exclude_for(repo),
-            skipped=skipped, note=trivy.note if trivy else "the sample uses the Desk's own readers")
-        if trivy and trivy.ready and any(d["ecosystem"] == "CocoaPods" for d in deps):
-            try:
-                pods = gz.security.trivy_cocoapods(root, trivy.path, cache, deps)
-            except gz.security.ScannerError as exc:
-                pods = []
-                problems.append(f"CocoaPods packages not checked: {exc}")
-        else:
-            pods = []
-        if not all_listed:
-            problems.append(f"more than {len(manifests)} dependency files; the rest were not checked")
-        notes += problems
-        try:
-            kev = feeds.kev()
-            store.coverage_ok(repo, "exploited-now list")
-        except gz.security.FeedError as exc:
-            kev = set()
-            store.coverage_error(repo, "exploited-now list", str(exc))
-            notes.append(str(exc))
-        advisories = (feeds.advisories(deps) if deps else []) + pods
-    except Exception as exc:  # noqa: BLE001 - reported, never silent
-        store.coverage_error(repo, "dependencies", f"{type(exc).__name__}: {exc}")
-        return {"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]}
-    floor = settings.security.severity_floor
-    direct = gz.security.declared(manifests)
-    code, code_complete = gz.security.source_files(root)
-    items, unused = [], 0
-    for a in advisories:
-        a["kev"] = bool(set(a["cves"]) & kev)
-        if not gz.security.passes_gate(a, kev, floor):
-            continue
-        hits = gz.security.imports(code, a["dep"])
-        if gz.security.unused(a["dep"], direct, hits, code_complete) and not a["kev"]:
-            unused += 1
-            continue
-        a["usage"] = hits or []
-        a["assessment_fp"] = gz.runtime.digest_of(sha, a["dep"], a["summary"], a.get("fixed"), a["usage"])
-        if not hits:
-            a["usage"] = ["No static import found. CLI, plugin, transitive and dynamic usage is unknown; do not infer unused."]
-        a["assess"] = gz.security.needs_assessment(store, repo, a)
-        items.append(a)
-    if problems:
-        store.coverage_error(repo, "lockfiles", "; ".join(problems))
-    return {"repo": repo, "sha": sha, "deps": len(deps), "read_with": read_with, "items": items, "unused": unused,
-            "notes": notes,
-            "complete": not problems, "profile": gz.profiles.text(store.profile(repo)), "skipped": skipped}
+    return flow.dependency_scan(repo)
 
 
 @step()
 def security_record(repo: str, items: list[dict], ignored: list[dict], stamp: str, clean: bool, complete: bool,
                     skipped_files: list[str] = ()) -> dict:
-    store = gz.store.Store(hub.data_dir)
-    for it in ignored:
-        gz.security.ignore(store, repo, it, it.get("impact") or "judged not reachable from this code", stamp)
-    changes = gz.security.reconcile(store, repo, items, stamp, complete=complete, skipped_files=set(skipped_files))
-    if clean:
-        store.coverage_ok(repo, "dependencies")
-        store.coverage_ok(repo, "lockfiles")
-    return changes
+    return flow.record_dependencies(repo, items, ignored, stamp, clean, complete, skipped_files)
 
 
 @step()
@@ -159,35 +95,16 @@ def security_watch():
             if s.get("error"):
                 summary.append({"repo": repo, "error": s["error"]})
                 continue
-            items, ignored = s["items"], []
-            todo = [i for i in items if i["assess"]]
-            if todo and not flow.charge(1):
-                try:
-                    review = flow.ask(gz.security.assessment_prompt(repo, s["profile"], todo),
-                                      system=gz.security.ASSESS_SYSTEM, response_model=gz.models.DependencyReview,
-                                      model=settings.security.model)
-                    verdicts = {v.advisory: v for v in review.items}
-                except flow.Unreadable:
-                    verdicts = {}  # unjudged advisories are kept: an alert is safer than silence
-                kept = []
-                for it in items:
-                    v = verdicts.get(it["key"])
-                    # The model may judge an advisory unreachable, but never one exploited now or critical.
-                    if v is not None and not v.keep and not it["kev"] and it["severity"] != "critical":
-                        ignored.append({**it, "impact": v.impact})
-                        continue
-                    if v is not None:
-                        it = {**it, "impact": v.impact, "fix": v.fix}
-                    kept.append(it)
-                items = kept
+            items, ignored = flow.judge_dependencies(settings, repo, s)
             c = security_record(repo, items, ignored, p["stamp"], not s["notes"], s["complete"], s.get("skipped", []))
             for k in changes:
                 changes[k] += [{**x, "repo": repo} for x in c[k]]
             # No dependency file read is "not checked", never "0 advisories".
-            summary.append({"repo": repo, "dependencies": s["deps"] or "not checked: no dependency file found",
+            summary.append({"repo": repo, "dependencies": flow.dependency_count(s),
                             "advisories": len(items),
                             "new": len(c["new"]), "worse": len(c["escalated"]), "resolved": len(c["resolved"]),
-                            "unused_dropped": s["unused"], "notes": s["notes"]})
+                            "unused_dropped": s["unused"], "notes": s["notes"],
+                            "page": flow.publish_repo_page(repo)["page"]})
         view = security_group_view(g["repos"])
         problems = gz.runtime.due_coverage(view["coverage"])
         art, sent = None, None

@@ -272,7 +272,8 @@ def test_security_watch_alerts_once(hub):
     group = r.value["platform"]["repos"][0]
     assert (group["new"], group["advisories"]) == (1, 1)  # PyYAML 5.3.1, reachable from app/catalog.py
     assert r.emails[0]["list"] == "platform-security" and "pyyaml" in r.emails[0]["body"]
-    assert r.artifacts[0]["audience"] == "hub" and r.artifacts[0]["key"] is None  # one page per alert
+    alert = next(a for a in r.artifacts if a["key"] is None)  # one page per alert, beside the repo page
+    assert alert["audience"] == "hub" and "Security" in alert["title"]
     row = store(hub).ledger_rows([REPO])[0]
     assert row["severity"] == "critical" and "reachable" in row["impact"]
     again = h.run_local(security, hub_dir=hub, trigger="schedule")
@@ -433,13 +434,15 @@ def test_workflow_declarations(hub):
     from hubzoid.workflows.schedule_grammar import to_cron
     defs = {n: d for n, d in h.definitions(hub).items() if n != "repeated_request"}  # built in
     assert set(defs) == {"setup_check", "github_events", "pr_sweep", "security_watch", "deep_audit", "repo_profiles",
-                         "weekly_digest", "code_report", "delivery_report", "people_report", "review_diff"}
+                         "weekly_digest", "code_report", "delivery_report", "people_report", "review_diff",
+                         "check_repo"}
     for d in defs.values():
         if d.schedule:
             to_cron(d.schedule)
         assert d.run_as is None  # team runs use HUBZOID_WORKFLOW_USER
     tools = {n: d for n, d in defs.items() if d.as_tool}
-    assert set(tools) == {"repo_profiles", "code_report", "delivery_report", "people_report", "review_diff"}
+    assert set(tools) == {"repo_profiles", "code_report", "delivery_report", "people_report", "review_diff",
+                          "check_repo"}
     assert all(d.surfaces == ("web", "owui", "mcp") and d.doc for d in tools.values())
     assert tools["people_report"].sensitive and tools["repo_profiles"].confirm
     assert tools["review_diff"].max_input_bytes == 256 * 1024 and tools["review_diff"].tool_wait == 180

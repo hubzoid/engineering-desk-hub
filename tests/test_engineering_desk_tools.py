@@ -120,12 +120,13 @@ def test_the_repo_is_a_complete_hub():
         assert (root / rel).is_file(), rel
     ignored = (root / ".gitignore").read_text().split()
     assert {".env", ".hubzoid/", ".venv/"} <= set(ignored) and "restricted/" not in ignored
-    assert "hubzoid>=2.0.3,<3" in (root / "requirements.txt").read_text()
+    assert "hubzoid>=2.0.8,<3" in (root / "requirements.txt").read_text()  # 2.0.8: Get started cards
     assert "HUBZOID_SCHEDULES=1" in (root / ".env.example").read_text()
 
 
-# Changed once, for the rename to the Engineering Desk (UPGRADING.md, "From GitZoid").
-SHIPPED_SETTINGS_SHA256 = "fc079aaf9e595e9b384f2597fce662b7702f013e9f748f97d7f8a9a3ac0c90da"
+# Changed for the rename to the Engineering Desk (UPGRADING.md, "From GitZoid"), and before
+# 1.0.0 was released to start on a local folder (source: local) instead of GitHub.
+SHIPPED_SETTINGS_SHA256 = "d9c6802b9cea118c22981c7741f01a1761e13e81f95e008257d9ee398e4ff703"
 
 
 def test_the_shipped_settings_file_never_changes():

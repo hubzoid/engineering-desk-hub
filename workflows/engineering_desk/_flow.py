@@ -68,7 +68,7 @@ def configuration_version(settings, repo: str, repo_controls: dict, hub_rules: l
     # turning reports on must not re-review every pull request, and hubs from
     # before these settings keep exactly the same fingerprint.
     return gz.rules.fingerprint(repo_controls, hub_rules, guide, settings.review.model_dump(exclude={"wait_for_profile_minutes"}),
-                                settings.repo(repo).model_dump(exclude={"reviews", "security", "reports"}), settings.context,
+                                settings.repo(repo).model_dump(exclude={"reviews", "security", "reports", "path"}), settings.context,
                                 [a.model_dump() for a in settings.analyzers], settings.commands, gz.profiles.content(profile), hub.secret("MODEL", ""))
 
 
@@ -645,3 +645,198 @@ def now_iso() -> str:
 
 def dumps(x) -> str:
     return json.dumps(x, default=str)
+
+
+# ------------------------------------------------------------------ repo page
+
+def repo_page_key(repo: str) -> str:
+    """The page's series key: one per repo, so its link always shows the latest run."""
+    slug = re.sub(r"[^a-z0-9]+", "-", repo.lower()).strip("-")[:60]
+    return f"repo-{slug}-{hashlib.sha1(repo.encode()).hexdigest()[:6]}"
+
+
+@step()
+def publish_repo_page(repo: str, notes: list[str] | None = None, previews: list[dict] | None = None) -> dict:
+    """Publish the repo's page under its fixed key. A page whose data did not
+    change stores no new copy; its link stays the same either way."""
+    settings = gz.settings.load(hub.setting("engineering_desk"))
+    store = gz.store.Store(hub.data_dir)
+    rows = store.ledger_rows([repo], state=None)
+    coverage = store.coverage([repo])
+    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    html = gz.render.repo_page(repo, stamp, rows, coverage, notes or [], verified=settings.audit.verify,
+                               previews=previews or [])
+    data = ([{k: v for k, v in r.items() if k not in ("last_seen", "alerted_at")} for r in rows],
+            [(c["check_name"], bool(c.get("last_ok")), c.get("last_error")) for c in coverage], notes, previews)
+    art = gz.runtime.publish(hub, f"repo-{repo}", html, f"{repo} · repo check", key=repo_page_key(repo),
+                             team_audience="hub", digest=gz.runtime.digest_of(gz.render.PAGE_VERSION, *data))
+    return {"repo": repo, "page": gz.runtime.link_of(art)}
+
+
+# ------------------------------------------------- checks shared by workflows
+# Plain functions: each workflow wraps them in its own @step.
+
+def dependency_scan(repo: str) -> dict:
+    """Advisories for one repo that pass the feed gate, with where the code
+    imports each package. Raises nothing: a failure is a coverage problem."""
+    settings, store, gh = ctx()
+    feeds = gz.runtime.make_feeds(settings, HUB_DIR)
+    notes = []
+    try:
+        root, sha = gz.checkout.ensure(gh, repo, hub.data_dir)
+        skipped: list[str] = []
+        manifests, all_listed = gz.security.manifest_files(root, exclude=settings.exclude_for(repo), skipped=skipped)
+        # The sample is offline and fixed: it keeps the Desk's own readers.
+        trivy = gz.scanners.find("trivy") if settings.source != "sample" else None
+        cache = gz.scanners.cache_dir() / "trivy-data"
+        deps, problems, read_with = gz.security.list_dependencies(
+            root, manifests, trivy.path if trivy else None, cache, exclude=settings.exclude_for(repo),
+            skipped=skipped, note=trivy.note if trivy else "the sample uses the Desk's own readers")
+        if trivy and trivy.ready and any(d["ecosystem"] == "CocoaPods" for d in deps):
+            try:
+                pods = gz.security.trivy_cocoapods(root, trivy.path, cache, deps)
+            except gz.security.ScannerError as exc:
+                pods = []
+                problems.append(f"CocoaPods packages not checked: {exc}")
+        else:
+            pods = []
+        if not all_listed:
+            problems.append(f"more than {len(manifests)} dependency files; the rest were not checked")
+        notes += problems
+        try:
+            kev = feeds.kev()
+            store.coverage_ok(repo, "exploited-now list")
+        except gz.security.FeedError as exc:
+            kev = set()
+            store.coverage_error(repo, "exploited-now list", str(exc))
+            notes.append(str(exc))
+        advisories = (feeds.advisories(deps) if deps else []) + pods
+    except Exception as exc:  # noqa: BLE001 - reported, never silent
+        store.coverage_error(repo, "dependencies", f"{type(exc).__name__}: {exc}")
+        return {"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]}
+    floor = settings.security.severity_floor
+    direct = gz.security.declared(manifests)
+    code, code_complete = gz.security.source_files(root)
+    items, unused = [], 0
+    for a in advisories:
+        a["kev"] = bool(set(a["cves"]) & kev)
+        if not gz.security.passes_gate(a, kev, floor):
+            continue
+        hits = gz.security.imports(code, a["dep"])
+        if gz.security.unused(a["dep"], direct, hits, code_complete) and not a["kev"]:
+            unused += 1
+            continue
+        a["usage"] = hits or []
+        a["assessment_fp"] = gz.runtime.digest_of(sha, a["dep"], a["summary"], a.get("fixed"), a["usage"])
+        if not hits:
+            a["usage"] = ["No static import found. CLI, plugin, transitive and dynamic usage is unknown; do not infer unused."]
+        a["assess"] = gz.security.needs_assessment(store, repo, a)
+        items.append(a)
+    if problems:
+        store.coverage_error(repo, "lockfiles", "; ".join(problems))
+    return {"repo": repo, "sha": sha, "deps": len(deps), "files": len(manifests), "read_with": read_with,
+            "items": items, "unused": unused,
+            "notes": notes,
+            "complete": not problems, "profile": gz.profiles.text(store.profile(repo)), "skipped": skipped}
+
+
+def dependency_count(s: dict) -> int | str:
+    """The packages checked, or why none were: no file at all is "not checked";
+    files with no exact version pinned were checked and have nothing to look up."""
+    if s["deps"]:
+        return s["deps"]
+    if s.get("files"):
+        return f"0: no exact version pinned in {s['files']} dependency file{'s' if s['files'] > 1 else ''}"
+    return "not checked: no dependency file found"
+
+
+def judge_dependencies(settings, repo: str, s: dict) -> tuple[list[dict], list[dict]]:
+    """The model judges whether each new or changed advisory is reachable in
+    this code and writes its impact and fix. Returns (kept, judged unreachable).
+    It may never set aside one exploited now or critical."""
+    items, ignored = s["items"], []
+    todo = [i for i in items if i["assess"]]
+    if not todo or charge(1):
+        return items, ignored
+    try:
+        review = ask(gz.security.assessment_prompt(repo, s["profile"], todo),
+                     system=gz.security.ASSESS_SYSTEM, response_model=gz.models.DependencyReview,
+                     model=settings.security.model)
+        verdicts = {v.advisory: v for v in review.items}
+    except Unreadable:
+        verdicts = {}  # unjudged advisories are kept: an alert is safer than silence
+    kept = []
+    for it in items:
+        v = verdicts.get(it["key"])
+        if v is not None and not v.keep and not it["kev"] and it["severity"] != "critical":
+            ignored.append({**it, "impact": v.impact})
+            continue
+        if v is not None:
+            it = {**it, "impact": v.impact, "fix": v.fix}
+        kept.append(it)
+    return kept, ignored
+
+
+def record_dependencies(repo: str, items: list[dict], ignored: list[dict], stamp: str, clean: bool, complete: bool,
+                        skipped_files=(), alerted: bool = True) -> dict:
+    store = gz.store.Store(hub.data_dir)
+    for it in ignored:
+        gz.security.ignore(store, repo, it, it.get("impact") or "judged not reachable from this code", stamp)
+    changes = gz.security.reconcile(store, repo, items, stamp, complete=complete, skipped_files=set(skipped_files),
+                                    alerted=alerted)
+    if clean:
+        store.coverage_ok(repo, "dependencies")
+        store.coverage_ok(repo, "lockfiles")
+    return changes
+
+
+def secret_sweep(repo: str) -> dict:
+    """The weekly secret scan: Gitleaks over the whole checkout, or for a local
+    folder over every commit in its history (a key deleted later is still in
+    the history). Its hits go through the audit's second pass like any finding."""
+    settings, store, gh = ctx()
+    tool = gz.scanners.find("gitleaks", download=settings.source != "sample")
+    if not tool.ready:
+        problem = f"secret scan not run: {tool.note}"
+        if settings.source != "sample":  # the fictional, offline sample has nothing to alert about
+            store.coverage_error(repo, "secret scan", problem)
+        return {"problem": problem}
+    root = gz.checkout.path_for(hub.data_dir, repo)
+    try:
+        if settings.source == "local":
+            hits = gz.checks.secret_scan(Path(settings.folders()[repo]).expanduser(), tool.path, history=True)
+        else:
+            hits = gz.checks.secret_scan(root, tool.path)
+    except gz.checks.ScanError as exc:
+        store.coverage_error(repo, "secret scan", f"secret scan not run: {exc}")
+        return {"problem": f"secret scan not run: {exc}"}
+    store.coverage_ok(repo, "secret scan")
+    found = gz.audit.secret_findings(hits)
+    return {"findings": found, "batch": gz.audit.windows_around(root, found)}
+
+
+def verify_secrets(settings, repo: str, profile_text: str, sweep: dict) -> tuple[list[dict], list[dict]]:
+    """The audit's second pass over the secret scan's hits: (kept, refuted),
+    each refuted one with its reason. Unverified secrets are kept: an alert is
+    safer than silence."""
+    found = sweep.get("findings") or []
+    if not found or not settings.audit.verify or charge(1):
+        return found, []
+    try:
+        checked = ask(gz.audit.verify_prompt(repo, profile_text, found, [tuple(b) for b in sweep["batch"]]),
+                      system=gz.review.VERIFY_SYSTEM, response_model=gz.models.Verification,
+                      model=settings.audit.model, timeout=600)
+    except Unreadable:
+        return found, []
+    return gz.audit.apply_verdicts(found, [v.model_dump() for v in checked.verdicts])
+
+
+def record_secrets(repo: str, findings: list[dict], stamp: str, refuted: list[dict] | None = None,
+                   alerted: bool = True) -> list[dict]:
+    """Save one whole-repo secret scan: the kept secrets (new ones returned for
+    alerts), then the refuted ones with their reasons."""
+    store = gz.store.Store(hub.data_dir)
+    root = gz.checkout.path_for(hub.data_dir, repo)
+    new = gz.audit.record(store, repo, findings, sorted({f["path"] for f in findings}), root, stamp, alerted=alerted)
+    gz.audit.record_refuted(store, repo, refuted or [], stamp)
+    return new

@@ -22,7 +22,28 @@ cp .env.example .env
 - `HUBZOID_SCHEDULES=1` lets `hubzoid run` run Engineering Desk's schedules. Without it
   nothing runs on its own, and `hubzoid hub doctor .` says so.
 
-## 2. Give Engineering Desk a GitHub token
+## 2. Choose your code: a folder first, GitHub later
+
+A fresh clone reads folders on this machine (`source: local`), with no token.
+In `workflows/settings.yaml`, add each folder under `repos:`:
+
+```yaml
+engineering_desk:
+  version: 2
+  source: local
+  repos:
+    - name: me/ios-app          # any owner/name label
+      path: ~/code/ios-app      # a git working copy
+      security: true
+```
+
+It reads what git tracks at the folder's current commit (ignored files such
+as `.env` never, uncommitted edits once committed), scans the folder's whole
+history for secrets, and writes nothing to it. Pull request reviews and
+reports need GitHub, so they stay off until you connect it. Then ask
+*"Check my repo"* in chat, and skip to step 4.
+
+### Or GitHub, for pull request reviews
 
 Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new)
 with access to **only the repos you want Engineering Desk to read**. Chat can read
@@ -62,7 +83,7 @@ expire. App credentials win when both are set. Chat's GitHub tools use
 ## 3. Choose repos and what runs
 
 Everything is in `workflows/settings.yaml`. It is yours: updates never change
-it. Set `source: github` and list your repos:
+it. For GitHub, set `source: github` and list your repos:
 
 ```yaml
 engineering_desk:

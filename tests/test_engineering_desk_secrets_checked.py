@@ -117,6 +117,37 @@ def test_the_weekly_scan_alerts_only_the_secrets_the_second_pass_keeps(hub, fake
     secrets = [row for row in store.ledger_rows([REPO], kind="audit") if row["advisory"] == "secret"]
     assert [(row["path"], row["line"]) for row in secrets] == [("app/sync.py", 2)]
     assert r.value["new_findings"] == 1 and r.value["audited"][0]["refuted_by_second_pass"] == 1
+    dropped = store.ledger_rows([REPO], state="refuted", kind="audit")
+    assert [(row["path"], row["impact"]) for row in dropped] == [("CONTRIBUTING.md", "Documentation shows a placeholder.")]
+    assert not dropped[0]["alerted_at"]
+
+
+def test_a_dropped_secret_is_kept_with_its_reason_and_reopens_if_confirmed(tmp_path):
+    """The plan's "dropped with a reason": the reason is stored and shown on the
+    repo page, folded away. A later confirmation opens and alerts it; a
+    refutation never closes an open one; one no longer found goes away."""
+    store = gz.store.Store(tmp_path)
+    fake = gz.audit.secret_findings([{"path": "tests/fixtures/keys.py", "line": 1, "rule": "github-pat"}])[0]
+    live = gz.audit.secret_findings([{"path": "app/settings.py", "line": 3, "rule": "github-pat"}])[0]
+    why = f"A made-up token ({_token(5)}) in a test fixture."
+    gz.audit.record(store, REPO, [live], ["app/settings.py"], tmp_path, "2026-11-01")
+    gz.audit.record_refuted(store, REPO, [{**fake, "reason": why}], "2026-11-01")
+    row = store.ledger(gz.audit.key(REPO, fake))
+    assert row["state"] == "refuted" and not row["alerted_at"]
+    assert row["impact"] == "A made-up token ([redacted]) in a test fixture."  # never the key itself
+    coverage = [{"check_name": "secret scan", "last_ok": "2026-11-01T00:00:00", "last_error": None}]
+    html = gz.render.repo_page(REPO, "2026-11-01T00:00:00", store.ledger_rows([REPO], state=None), coverage)
+    assert "Judged not a real secret (1)" in html and "tests/fixtures/keys.py" in html and _token(5) not in html
+
+    gz.audit.record_refuted(store, REPO, [{**live, "reason": "looks fake"}], "2026-11-02")
+    assert store.ledger(gz.audit.key(REPO, live))["state"] == "open"  # an open one stays open
+    assert store.ledger(gz.audit.key(REPO, fake))["state"] == "resolved"  # not found this time
+
+    gz.audit.record_refuted(store, REPO, [{**fake, "reason": "fixture"}], "2026-11-03")
+    assert store.ledger(gz.audit.key(REPO, fake))["state"] == "refuted"  # found again: shown again
+    new = gz.audit.record(store, REPO, [fake], ["tests/fixtures/keys.py"], tmp_path, "2026-11-04")
+    assert [n["path"] for n in new] == ["tests/fixtures/keys.py"]  # confirmed later: opened and alerted
+    assert store.ledger(gz.audit.key(REPO, fake))["state"] == "open"
 
 
 def test_in_the_sample_a_missing_gitleaks_is_a_note_and_the_audit_still_runs(hub, monkeypatch, tmp_path):
@@ -205,3 +236,26 @@ def test_a_pull_request_that_adds_a_gitleaksignore_still_has_its_secret_flagged(
     view = {"open": [], "risk": "low", "sha": "abc1234", "reviewed_files": 2, "total_files": 2, "notes": notes,
             "verdict": "looks_good"}
     assert "This change edits `.gitleaksignore`" in gz.review.summary(view, {}, False)
+
+
+def test_a_reworded_secret_stays_marked_as_hidden_and_reasons_keep_their_paths(tmp_path):
+    """Seen end to end: the first look found the same key and its wording
+    replaced the "hidden by .gitleaksignore" note; and a path in a reason was
+    taken for a key."""
+    store = gz.store.Store(tmp_path)
+    [hidden] = gz.audit.secret_findings([{"path": "config/deploy.py", "line": 2, "rule": "github-pat", "hidden": True}])
+    gz.audit.record(store, REPO, [hidden], ["config/deploy.py"], tmp_path, "2026-11-01", alerted=False)
+    reworded = {**hidden, "body": "A GitHub token is hardcoded in source."}
+    gz.audit.record(store, REPO, [reworded], ["config/deploy.py"], tmp_path, "2026-11-01", alerted=False)
+    [row] = store.ledger_rows([REPO], kind="audit")
+    assert row["title"].startswith("A GitHub token is hardcoded") and "hidden from Gitleaks" in row["title"]
+    long = {**hidden, "body": "A GitHub token is hardcoded in source and anyone can use it. " * 6}
+    gz.audit.record(store, REPO, [long], ["config/deploy.py"], tmp_path, "2026-11-01", alerted=False)
+    title = store.ledger_rows([REPO], kind="audit")[0]["title"]
+    assert len(title) <= 300 and title.endswith("… It is hidden from Gitleaks by the repo's .gitleaksignore.")
+    coverage = [{"check_name": "secret scan", "last_ok": "2026-11-01T00:00:00", "last_error": None}]
+    html = gz.render.repo_page(REPO, "2026-11-01T00:00:00", store.ledger_rows([REPO], state=None), coverage)
+    assert "1 hidden by the repo&#x27;s .gitleaksignore" in html or "1 hidden by the repo's .gitleaksignore" in html
+    why = f"tests/fixtures/tokens.py says the values are made up; {_token(4)} was never issued."
+    assert gz.audit.TOKENISH.sub("[redacted]", why) == \
+        "tests/fixtures/tokens.py says the values are made up; [redacted] was never issued."

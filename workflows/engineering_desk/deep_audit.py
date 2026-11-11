@@ -199,31 +199,12 @@ def complete(repo: str, queued_only: bool) -> None:
 
 @step()
 def secret_sweep(repo: str) -> dict:
-    """The weekly secret scan of the whole default branch: Gitleaks over the
-    checkout. Its hits go through the audit's second pass like any finding."""
-    settings, store, gh = flow.ctx()
-    tool = gz.scanners.find("gitleaks", download=settings.source != "sample")
-    if not tool.ready:
-        problem = f"secret scan not run: {tool.note}"
-        if settings.source != "sample":  # the fictional, offline sample has nothing to alert about
-            store.coverage_error(repo, "secret scan", problem)
-        return {"problem": problem}
-    root = gz.checkout.path_for(hub.data_dir, repo)
-    try:
-        hits = gz.checks.secret_scan(root, tool.path)
-    except gz.checks.ScanError as exc:
-        store.coverage_error(repo, "secret scan", f"secret scan not run: {exc}")
-        return {"problem": f"secret scan not run: {exc}"}
-    store.coverage_ok(repo, "secret scan")
-    found = gz.audit.secret_findings(hits)
-    return {"findings": found, "batch": gz.audit.windows_around(root, found)}
+    return flow.secret_sweep(repo)
 
 
 @step()
-def secret_record(repo: str, findings: list[dict], stamp: str) -> list[dict]:
-    store = gz.store.Store(hub.data_dir)
-    root = gz.checkout.path_for(hub.data_dir, repo)
-    return gz.audit.record(store, repo, findings, sorted({f["path"] for f in findings}), root, stamp)
+def secret_record(repo: str, findings: list[dict], stamp: str, refuted: list[dict]) -> list[dict]:
+    return flow.record_secrets(repo, findings, stamp, refuted)
 
 
 @step()
@@ -250,19 +231,10 @@ def deep_audit():
         finished = True
         if not item.get("queued_only") and item["reason"] != "resuming":
             sweep = secret_sweep(repo)
-            found = sweep.get("findings") or []
-            if found and settings.audit.verify and not flow.charge(1):
-                try:
-                    checked = flow.ask(gz.audit.verify_prompt(repo, prep["profile"], found,
-                                                              [tuple(b) for b in sweep["batch"]]),
-                                       system=gz.review.VERIFY_SYSTEM, response_model=gz.models.Verification,
-                                       model=settings.audit.model, timeout=600)
-                    found, refuted = gz.audit.apply_verdicts(found, [v.model_dump() for v in checked.verdicts])
-                    dropped_by_check[repo] = dropped_by_check.get(repo, 0) + len(refuted)
-                except flow.Unreadable:
-                    pass  # unverified secrets are kept: an alert is safer than silence
-            if found:
-                new = secret_record(repo, found, p["stamp"])
+            found, refuted = flow.verify_secrets(settings, repo, prep["profile"], sweep)
+            dropped_by_check[repo] = dropped_by_check.get(repo, 0) + len(refuted)
+            if not sweep.get("problem"):
+                new = secret_record(repo, found, p["stamp"], refuted)
                 new_by_group.setdefault(item["group"], []).extend({**n, "repo": repo} for n in new)
         for paths in prep["batches"]:
             if not time_left(p["deadline"]):
@@ -344,6 +316,7 @@ def deep_audit():
                 coverage_problem(repo, "; ".join(errors))
             else:
                 progressing(repo)
+        flow.publish_repo_page(repo)
     pages = {}
     for group, repos in p["group_repos"].items():
         new = new_by_group.get(group, [])
