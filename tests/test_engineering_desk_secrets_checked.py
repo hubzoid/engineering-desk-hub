@@ -249,6 +249,10 @@ def test_a_reworded_secret_stays_marked_as_hidden_and_reasons_keep_their_paths(t
     gz.audit.record(store, REPO, [reworded], ["config/deploy.py"], tmp_path, "2026-11-01", alerted=False)
     [row] = store.ledger_rows([REPO], kind="audit")
     assert row["title"].startswith("A GitHub token is hardcoded") and "hidden from Gitleaks" in row["title"]
+    long = {**hidden, "body": "A GitHub token is hardcoded in source and anyone can use it. " * 6}
+    gz.audit.record(store, REPO, [long], ["config/deploy.py"], tmp_path, "2026-11-01", alerted=False)
+    title = store.ledger_rows([REPO], kind="audit")[0]["title"]
+    assert len(title) <= 300 and title.endswith("… It is hidden from Gitleaks by the repo's .gitleaksignore.")
     coverage = [{"check_name": "secret scan", "last_ok": "2026-11-01T00:00:00", "last_error": None}]
     html = gz.render.repo_page(REPO, "2026-11-01T00:00:00", store.ledger_rows([REPO], state=None), coverage)
     assert "1 hidden by the repo&#x27;s .gitleaksignore" in html or "1 hidden by the repo's .gitleaksignore" in html

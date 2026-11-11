@@ -256,6 +256,7 @@ def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], not
                    ("vulnerable packages", count(len(deps), "dependencies"), ""),
                    ("code findings", count(len(code), "audit", "first look"), "")])]
     problems = [c for c in coverage if c.get("last_error")]
+    notes = [n for n in notes if n not in {c["last_error"] for c in problems}]  # said once
     if problems or notes:
         body.append('<p class="lead warn">Part of this repo was not checked: '
                     + esc("; ".join([f"{c['check_name']}: {c['last_error']}" for c in problems] + list(notes)))

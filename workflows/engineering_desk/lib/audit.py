@@ -292,7 +292,9 @@ def record(store, repo: str, kept: list[dict], audited: list[str], root: Path, s
         keys.add(k)
         title = f["body"][:300]
         if row and HIDDEN.strip() in (row.get("title") or "") and HIDDEN.strip() not in title:
-            title = title[:300 - len(HIDDEN)] + HIDDEN  # a rewording keeps "hidden by .gitleaksignore"
+            room = 300 - len(HIDDEN) - 1
+            cut = title if len(title) <= room else title[:room].rsplit(" ", 1)[0] + "…"
+            title = cut + HIDDEN  # a rewording keeps "hidden by .gitleaksignore"
         fields = dict(kind="audit", repo=repo, package=None, version=None, advisory=f["kind"], severity=f["severity"],
                       title=title, impact=f.get("evidence", "")[:500], fix="", path=f["path"],
                       line=f.get("line"), last_seen=stamp)
