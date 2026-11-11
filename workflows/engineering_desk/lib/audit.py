@@ -225,10 +225,12 @@ def secret_findings(hits: list[dict]) -> list[dict]:
     out = []
     for h in hits:
         where = f" in commit {h['commit'][:7]}" if h.get("commit") else ""
+        hidden = " It is hidden from Gitleaks by the repo's .gitleaksignore." if h.get("hidden") else ""
         out.append({"path": h["path"], "line": h["line"], "kind": "secret", "severity": "high", "confidence": "high",
-                    "body": f"A secret ({h['rule']}) is committed here{where}. Rotate it, then load it from the "
-                            "environment or a secret store" + (", and remove it from the history." if where else "."),
-                    "evidence": f"Gitleaks rule {h['rule']} at line {h['line']}{where}"})
+                    "body": f"A secret ({h['rule']}) is committed here{where}.{hidden} Rotate it, then load it from "
+                            "the environment or a secret store" + (", and remove it from the history." if where else "."),
+                    "evidence": f"Gitleaks rule {h['rule']} at line {h['line']}{where}"
+                                + (", listed in .gitleaksignore" if h.get("hidden") else "")})
     return out
 
 
@@ -264,10 +266,12 @@ def same_place(row: dict, f: dict, text: str | None = None) -> bool:
 
 
 def record(store, repo: str, kept: list[dict], audited: list[str], root: Path, stamp: str,
-           seen: set | None = None) -> list[dict]:
+           seen: set | None = None, alerted: bool = True) -> list[dict]:
     """Save audit findings and return unalerted entries. Resolution needs
     explicit evidence. A finding reworded near an open one of the same kind is
-    that finding, not news. `seen` collects the keys reported this time."""
+    that finding, not news. `seen` collects the keys reported this time. With
+    `alerted` off (a run that sends no email), new ones are saved unalerted,
+    so the next audit emails them once."""
     new = []
     keys = set() if seen is None else seen
     open_rows = store.ledger_rows([repo], state="open", kind="audit")
@@ -288,9 +292,36 @@ def record(store, repo: str, kept: list[dict], audited: list[str], root: Path, s
                       line=f.get("line"), last_seen=stamp)
         if row is None or row["state"] == "resolved" or not row["alerted_at"]:  # never alerted, or not delivered
             store.save_ledger(k, **fields, state="open", first_seen=(row or {}).get("first_seen") or stamp,
-                              alerted_at=stamp, alerted_severity=f["severity"])
+                              alerted_at=stamp if alerted else None, alerted_severity=f["severity"] if alerted else None)
             new.append({**fields, "key": k})
         else:
             store.save_ledger(k, last_seen=stamp, line=f.get("line"))
     # Earlier findings remain open until explicitly assessed; text edits alone do not resolve them.
     return new
+
+
+TOKENISH = re.compile(r"[A-Za-z0-9_\-+/=]{20,}")
+
+
+def record_refuted(store, repo: str, dropped: list[dict], stamp: str) -> None:
+    """Secrets the second pass refuted (a test fixture's made-up key), with
+    its reason, so the repo page shows what was dropped and why. Saved with no
+    alert: if a later pass confirms one, record() opens it and alerts. A
+    refutation never closes an open entry. One no longer found is resolved.
+    Call it after record(), once per whole-repo scan."""
+    keys = set()
+    for f in dropped:
+        k = key(repo, f)
+        keys.add(k)
+        row = store.ledger(k)
+        if row is not None and row["state"] not in ("refuted", "resolved"):
+            continue
+        # The second pass saw the code: a key it quoted never reaches the page.
+        reason = TOKENISH.sub("[redacted]", " ".join(str(f.get("reason") or "").split())) or "No reason given."
+        store.save_ledger(k, kind="audit", repo=repo, package=None, version=None, advisory=f["kind"],
+                          severity=f["severity"], title=f["body"][:300], impact=reason[:500], fix="",
+                          path=f["path"], line=f.get("line"), last_seen=stamp, state="refuted",
+                          first_seen=(row or {}).get("first_seen") or stamp, alerted_at=None, alerted_severity=None)
+    for row in store.ledger_rows([repo], state="refuted", kind="audit"):
+        if row["key"] not in keys:
+            store.save_ledger(row["key"], state="resolved", last_seen=stamp)

@@ -43,7 +43,7 @@ def run(hub, name, trigger="schedule", **kw):
 def test_the_shipped_settings_watch_nothing():
     doc = yaml.safe_load(SHIPPED.read_text())
     s = load(doc["engineering_desk"])
-    assert (s.version, s.source, s.repos) == (2, "github", [])
+    assert (s.version, s.source, s.repos) == (2, "local", [])  # a folder of your own first
     assert s.review_repos() == s.security_repos() == s.report_repos() == []
     assert s.security_scope() == {} and s.report_groups() == {}
     assert gz().settings.publishing(s) == "preview"

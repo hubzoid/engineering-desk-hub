@@ -203,8 +203,8 @@ def secret_sweep(repo: str) -> dict:
 
 
 @step()
-def secret_record(repo: str, findings: list[dict], stamp: str) -> list[dict]:
-    return flow.record_secrets(repo, findings, stamp)
+def secret_record(repo: str, findings: list[dict], stamp: str, refuted: list[dict]) -> list[dict]:
+    return flow.record_secrets(repo, findings, stamp, refuted)
 
 
 @step()
@@ -230,10 +230,11 @@ def deep_audit():
             continue
         finished = True
         if not item.get("queued_only") and item["reason"] != "resuming":
-            found, refuted = flow.verify_secrets(settings, repo, prep["profile"], secret_sweep(repo))
-            dropped_by_check[repo] = dropped_by_check.get(repo, 0) + refuted
-            if found:
-                new = secret_record(repo, found, p["stamp"])
+            sweep = secret_sweep(repo)
+            found, refuted = flow.verify_secrets(settings, repo, prep["profile"], sweep)
+            dropped_by_check[repo] = dropped_by_check.get(repo, 0) + len(refuted)
+            if not sweep.get("problem"):
+                new = secret_record(repo, found, p["stamp"], refuted)
                 new_by_group.setdefault(item["group"], []).extend({**n, "repo": repo} for n in new)
         for paths in prep["batches"]:
             if not time_left(p["deadline"]):

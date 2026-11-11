@@ -240,6 +240,7 @@ def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], not
     secrets = [r for r in open_rows if r["kind"] == "audit" and r.get("advisory") == "secret"]
     deps = [r for r in open_rows if r["kind"] == "dependency"]
     unreachable = [r for r in rows if r["kind"] == "dependency" and r["state"] == "ignored"]
+    refuted = [r for r in rows if r["kind"] == "audit" and r.get("advisory") == "secret" and r["state"] == "refuted"]
     code = [r for r in open_rows if r["kind"] == "audit" and r.get("advisory") != "secret"]
     rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     code.sort(key=lambda r: (rank.get(r["severity"], 4), r.get("path") or "", r.get("line") or 0))
@@ -262,6 +263,15 @@ def repo_page(repo: str, stamp: str, rows: list[dict], coverage: list[dict], not
     body.append("<h2>Secrets</h2>" + (table(["File", "Line", "What", "Fix"], [
         [r.get("path") or "", r.get("line") or "", r.get("title") or "", "Rotate it, then load it from the environment"]
         for r in secrets]) if ran("secret scan") else "<p class=\"meta warn\">Not checked yet.</p>"))
+    hidden = [r for r in secrets if "hidden from Gitleaks by the repo's .gitleaksignore" in (r.get("title") or "")]
+    if hidden:
+        body.append(f'<p class="meta warn">{len(hidden)} hidden by the repo\'s .gitleaksignore, and shown here '
+                    "anyway: check why each is listed there.</p>")
+    if refuted:
+        body.append(f"<details><summary>Judged not a real secret ({len(refuted)})</summary>"
+                    + table(["File", "Line", "Why the second pass dropped it"],
+                            [[r.get("path") or "", r.get("line") or "", r.get("impact") or ""] for r in refuted])
+                    + '<p class="meta">Disagree? It is still in the code: rotate it if it is real.</p></details>')
     body.append("<h2>Vulnerable packages</h2>" + (table(
         ["Package", "Version", "Advisory", "Severity", "Does the code use it?", "Fix", "File"],
         [[r.get("package") or "", r.get("version") or "", r.get("advisory") or "",

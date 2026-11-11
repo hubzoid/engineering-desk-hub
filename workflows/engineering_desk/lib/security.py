@@ -308,19 +308,51 @@ def trivy_dependencies(root: Path, trivy: str, cache: Path, exclude: list[str] =
     """Every pinned package in every dependency file Trivy reads (Swift,
     CocoaPods, Maven, NuGet, Dart and the rest), listed without its
     vulnerability database: seconds, and no download. Vendored, test and
-    excluded folders are left out as in `manifest_files`."""
+    excluded folders are left out as in `manifest_files`.
+
+    A file lists only its direct packages; the indirect ones hang off those,
+    so each file's graph is walked to the end. A package no file reaches is
+    kept under the file of its type, never dropped."""
+    from collections import deque
     sbom = _trivy(trivy, Path(root), cache, ["--format", "cyclonedx"], timeout)
-    files = {c.get("bom-ref"): c.get("name") for c in sbom.get("components") or [] if c.get("type") == "application"}
-    deps, seen = [], set()
-    for edge in sbom.get("dependencies") or []:
-        rel = files.get(edge.get("ref"))
-        if not rel or not _kept(rel, list(exclude), skipped):
+    comps = {c.get("bom-ref"): c for c in sbom.get("components") or []}
+    files = {ref: c.get("name") for ref, c in comps.items() if c.get("type") == "application" and c.get("name")}
+    graph = {e.get("ref"): e.get("dependsOn") or [] for e in sbom.get("dependencies") or []}
+    deps, seen, reached = [], set(), set()
+
+    def add(ref: str, rel: str) -> None:
+        purl = (comps.get(ref) or {}).get("purl") or (ref if str(ref).startswith("pkg:") else "")
+        dep = purl_dep(purl)
+        if dep and dep not in seen:
+            seen.add(dep)
+            deps.append({"ecosystem": dep[0], "name": dep[1], "version": dep[2], "file": rel})
+
+    for file_ref, rel in files.items():
+        kept = _kept(rel, list(exclude), skipped)
+        queue, visited = deque(graph.get(file_ref, [])), set()
+        while queue:
+            ref = queue.popleft()
+            if ref in visited:
+                continue
+            visited.add(ref)
+            reached.add(ref)
+            if kept:
+                add(ref, rel)
+            queue.extend(graph.get(ref, []))
+
+    def prop(c: dict, name: str) -> str:
+        return next((x.get("value", "") for x in c.get("properties") or [] if x.get("name") == name), "")
+
+    by_type: dict[str, list[str]] = {}
+    for ref, rel in files.items():
+        by_type.setdefault(prop(comps[ref], "aquasecurity:trivy:Type"), []).append(rel)
+    for ref, c in comps.items():
+        if c.get("type") != "library" or ref in reached:
             continue
-        for purl in edge.get("dependsOn") or []:
-            dep = purl_dep(purl)
-            if dep and dep not in seen:
-                seen.add(dep)
-                deps.append({"ecosystem": dep[0], "name": dep[1], "version": dep[2], "file": rel})
+        rels = sorted(by_type.get(prop(c, "aquasecurity:trivy:PkgType"), []))
+        if len(rels) == 1 and not _kept(rels[0], list(exclude), None):
+            continue
+        add(ref, rels[0] if len(rels) == 1 else ", ".join(rels) or "a dependency file")
     return deps
 
 
@@ -707,14 +739,17 @@ def ignore(store, repo: str, item: dict, reason: str, stamp: str) -> None:
 
 
 def reconcile(store, repo: str, items: list[dict], stamp: str, complete: bool = True,
-              skipped_files=()) -> dict:
+              skipped_files=(), alerted: bool = True) -> dict:
     """Compare today's advisories for one repo with the ledger. Returns the
     new, escalated and resolved entries. Assessed-unreachable ones are kept
     as 'ignored' and come back only if they escalate. Nothing is resolved
     after an incomplete scan (a lockfile that could not be read, or too many
     to read): a missing advisory then means "not checked", not "fixed". An
-    open entry whose alert was never delivered is alerted again."""
+    open entry whose alert was never delivered is alerted again. With
+    `alerted` off (a run that sends no email), new and escalated entries are
+    saved unalerted, so the next watch emails them once."""
     out = {"new": [], "escalated": [], "resolved": []}
+    sent = stamp if alerted else None
     seen = set()
     for item in items:
         key = ledger_key(repo, item)
@@ -727,7 +762,8 @@ def reconcile(store, repo: str, items: list[dict], stamp: str, complete: bool = 
                       path=item["dep"]["file"], last_seen=stamp, assessment_fp=item.get("assessment_fp"))
         if row is None or row["state"] in ("resolved", "skipped") or (row["state"] == "open" and not row["alerted_at"]):
             store.save_ledger(key, **fields, state="open", first_seen=(row or {}).get("first_seen") or stamp,
-                              alerted_at=stamp, alerted_severity=item["severity"], alerted_kev=int(kev))
+                              alerted_at=sent, alerted_severity=item["severity"] if sent else None,
+                              alerted_kev=int(kev) if sent else 0)
             out["new"].append({**fields, "key": key, "url": item["url"]})
             continue
         worse = _worse(item, row)
@@ -735,8 +771,8 @@ def reconcile(store, repo: str, items: list[dict], stamp: str, complete: bool = 
             store.save_ledger(key, last_seen=stamp)
             continue
         if worse or row["state"] == "ignored":
-            store.save_ledger(key, **fields, state="open", alerted_at=stamp, alerted_severity=item["severity"],
-                              alerted_kev=int(kev))
+            store.save_ledger(key, **fields, state="open", alerted_at=sent,
+                              alerted_severity=item["severity"] if sent else None, alerted_kev=int(kev) if sent else 0)
             out["escalated"].append({**fields, "key": key, "url": item["url"]})
         else:
             store.save_ledger(key, **fields)

@@ -117,6 +117,37 @@ def test_the_weekly_scan_alerts_only_the_secrets_the_second_pass_keeps(hub, fake
     secrets = [row for row in store.ledger_rows([REPO], kind="audit") if row["advisory"] == "secret"]
     assert [(row["path"], row["line"]) for row in secrets] == [("app/sync.py", 2)]
     assert r.value["new_findings"] == 1 and r.value["audited"][0]["refuted_by_second_pass"] == 1
+    dropped = store.ledger_rows([REPO], state="refuted", kind="audit")
+    assert [(row["path"], row["impact"]) for row in dropped] == [("CONTRIBUTING.md", "Documentation shows a placeholder.")]
+    assert not dropped[0]["alerted_at"]
+
+
+def test_a_dropped_secret_is_kept_with_its_reason_and_reopens_if_confirmed(tmp_path):
+    """The plan's "dropped with a reason": the reason is stored and shown on the
+    repo page, folded away. A later confirmation opens and alerts it; a
+    refutation never closes an open one; one no longer found goes away."""
+    store = gz.store.Store(tmp_path)
+    fake = gz.audit.secret_findings([{"path": "tests/fixtures/keys.py", "line": 1, "rule": "github-pat"}])[0]
+    live = gz.audit.secret_findings([{"path": "app/settings.py", "line": 3, "rule": "github-pat"}])[0]
+    why = f"A made-up token ({_token(5)}) in a test fixture."
+    gz.audit.record(store, REPO, [live], ["app/settings.py"], tmp_path, "2026-11-01")
+    gz.audit.record_refuted(store, REPO, [{**fake, "reason": why}], "2026-11-01")
+    row = store.ledger(gz.audit.key(REPO, fake))
+    assert row["state"] == "refuted" and not row["alerted_at"]
+    assert row["impact"] == "A made-up token ([redacted]) in a test fixture."  # never the key itself
+    coverage = [{"check_name": "secret scan", "last_ok": "2026-11-01T00:00:00", "last_error": None}]
+    html = gz.render.repo_page(REPO, "2026-11-01T00:00:00", store.ledger_rows([REPO], state=None), coverage)
+    assert "Judged not a real secret (1)" in html and "tests/fixtures/keys.py" in html and _token(5) not in html
+
+    gz.audit.record_refuted(store, REPO, [{**live, "reason": "looks fake"}], "2026-11-02")
+    assert store.ledger(gz.audit.key(REPO, live))["state"] == "open"  # an open one stays open
+    assert store.ledger(gz.audit.key(REPO, fake))["state"] == "resolved"  # not found this time
+
+    gz.audit.record_refuted(store, REPO, [{**fake, "reason": "fixture"}], "2026-11-03")
+    assert store.ledger(gz.audit.key(REPO, fake))["state"] == "refuted"  # found again: shown again
+    new = gz.audit.record(store, REPO, [fake], ["tests/fixtures/keys.py"], tmp_path, "2026-11-04")
+    assert [n["path"] for n in new] == ["tests/fixtures/keys.py"]  # confirmed later: opened and alerted
+    assert store.ledger(gz.audit.key(REPO, fake))["state"] == "open"
 
 
 def test_in_the_sample_a_missing_gitleaks_is_a_note_and_the_audit_still_runs(hub, monkeypatch, tmp_path):
@@ -128,3 +159,80 @@ def test_in_the_sample_a_missing_gitleaks_is_a_note_and_the_audit_still_runs(hub
     store = h.lib(hub).store.Store(hub / ".hubzoid" / "data")
     assert not any(c["check_name"] == "secret scan" and c["last_error"] for c in store.coverage([REPO]))
     assert r.value["audited"] and r.emails == []
+
+
+# ------------------------------------------- a scan that cannot stay silent
+
+@pytest.mark.parametrize("script", ["exit 1", "exit 126", "exit 0"])  # an error, a bad flag, a crash with no output
+def test_a_failing_gitleaks_is_not_checked_never_clean(tmp_path, script):
+    exe = tmp_path / "gitleaks"
+    exe.write_text(f"#!/bin/sh\necho 'FTL something broke' >&2\n{script}\n")
+    exe.chmod(0o755)
+    with pytest.raises(gz.checks.ScanError, match="Gitleaks failed"):
+        gz.checks.secret_scan(tmp_path, str(exe))
+
+
+def _gitleaks_fingerprint(gitleaks: str, root, history: bool) -> str:
+    import subprocess
+    out = subprocess.run([gitleaks, "git" if history else "dir", str(root), "--report-format", "json",
+                          "--report-path", "-", "--no-banner", "--exit-code", "0"], capture_output=True, text=True)
+    return json.loads(out.stdout)[0]["Fingerprint"]
+
+
+@pytest.mark.skipif(shutil.which("gitleaks") is None, reason="gitleaks binary not installed")
+@pytest.mark.parametrize("history", [False, True])
+def test_a_repos_own_gitleaksignore_cannot_hide_a_secret(tmp_path, history):
+    import subprocess
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app/config.py").write_text(f'GITHUB_TOKEN = "{_token(8)}"\n')
+    if history:
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x"],
+                       check=True)
+    gitleaks = shutil.which("gitleaks")
+    (tmp_path / ".gitleaksignore").write_text(_gitleaks_fingerprint(gitleaks, tmp_path, history) + "\n")
+    hits = gz.checks.secret_scan(tmp_path, gitleaks, history=history)
+    assert [(x["path"], x["line"], x["rule"], x.get("hidden")) for x in hits] == [("app/config.py", 1, "github-pat", True)]
+    [finding] = gz.audit.secret_findings(hits)
+    assert "hidden from Gitleaks by the repo's .gitleaksignore" in finding["body"]
+
+
+def test_gitleaksignore_entries_are_read_in_both_forms(tmp_path):
+    (tmp_path / "a.py").write_text("x\n")
+    (tmp_path / ".gitleaksignore").write_text(
+        "# reviewed\n" f"{tmp_path}/a.py:generic-api-key:3\n" "1a2fc331dc05e8eff9ee15267ac106ba72388618:b/c.py:github-pat:9\n"
+        "not an entry\n" "/elsewhere/x.py:rule:1\n")
+    assert gz.checks.gitleaks_ignored(tmp_path) == [
+        {"path": "a.py", "line": 3, "rule": "generic-api-key", "commit": "", "hidden": True},
+        {"path": "b/c.py", "line": 9, "rule": "github-pat", "commit": "1a2fc331dc05", "hidden": True}]
+
+
+@pytest.mark.skipif(shutil.which("gitleaks") is None, reason="gitleaks binary not installed")
+def test_a_pull_request_that_adds_a_gitleaksignore_still_has_its_secret_flagged(tmp_path, monkeypatch):
+    import os
+    monkeypatch.setenv("ENGINEERING_DESK_SCANNERS", str(tmp_path / "no-pinned-builds"))
+    fixed = tmp_path / "scan"  # the scan folder, known in advance, so the entry is the exact fingerprint
+
+    class Folder:
+        def __init__(self, **kwargs):
+            fixed.mkdir(exist_ok=True)
+
+        def __enter__(self):
+            return str(fixed)
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(gz.checks.tempfile, "TemporaryDirectory", Folder)
+    entry = f"{os.path.realpath(fixed)}/source/app/sync.py:github-pat:1"
+    token = _token(9)
+    body = {"app/sync.py": f'TOKEN = "{token}"\n', ".gitleaksignore": entry + "\n"}
+    files = [{"filename": n, "status": "added", "patch": "@@ -0,0 +1 @@\n+" + t.rstrip("\n")} for n, t in body.items()]
+    analyzers = [{"name": "gitleaks", "run": ["gitleaks", *gz.checks.SAFE_RUNS["gitleaks"]]}]
+    checks, notes = gz.checks.run_analyzers(files, body.get, analyzers, download=False)
+    assert [(c["path"], c["line"], c["secret"]) for c in checks] == [("app/sync.py", 1, True)]
+    assert any(n.startswith("gitleaks: this change edits .gitleaksignore") for n in notes)
+    view = {"open": [], "risk": "low", "sha": "abc1234", "reviewed_files": 2, "total_files": 2, "notes": notes,
+            "verdict": "looks_good"}
+    assert "This change edits `.gitleaksignore`" in gz.review.summary(view, {}, False)

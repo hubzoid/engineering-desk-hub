@@ -62,7 +62,8 @@ def first_dependencies(repo: str) -> dict:
 @step()
 def first_dependency_record(repo: str, items: list[dict], ignored: list[dict], stamp: str, clean: bool,
                             complete: bool, skipped_files: list[str] = ()) -> dict:
-    return flow.record_dependencies(repo, items, ignored, stamp, clean, complete, skipped_files)
+    # No email from a first check: saved unalerted, the next security watch emails them once.
+    return flow.record_dependencies(repo, items, ignored, stamp, clean, complete, skipped_files, alerted=False)
 
 
 @step()
@@ -71,8 +72,8 @@ def first_secrets(repo: str) -> dict:
 
 
 @step()
-def first_secret_record(repo: str, findings: list[dict], stamp: str) -> list[dict]:
-    return flow.record_secrets(repo, findings, stamp)
+def first_secret_record(repo: str, findings: list[dict], stamp: str, refuted: list[dict]) -> list[dict]:
+    return flow.record_secrets(repo, findings, stamp, refuted, alerted=False)
 
 
 @step()
@@ -102,7 +103,7 @@ def first_look_load(repo: str, unit: str) -> list | None:
 def first_look_record(repo: str, findings: list[dict], paths: list[str], stamp: str, finished: bool) -> list[dict]:
     store = gz.store.Store(hub.data_dir)
     root = gz.checkout.path_for(hub.data_dir, repo)
-    new = gz.audit.record(store, repo, findings, paths, root, stamp)
+    new = gz.audit.record(store, repo, findings, paths, root, stamp, alerted=False)
     if finished:
         store.coverage_ok(repo, "first look")
     return new
@@ -121,6 +122,15 @@ def newest_pulls(repo: str) -> dict:
     pulls = [p for p in gh.open_pulls(repo) if not gz.rules.skip_reason(p, settings.review, controls)]
     pulls.sort(key=lambda p: p.get("created_at") or "", reverse=True)
     return {"numbers": [p["number"] for p in pulls[:PREVIEWS]], "note": "" if pulls else "No open pull request to preview."}
+
+
+@step()
+def page_counts(repo: str) -> dict:
+    """The numbers the repo page shows: every open finding, from the store."""
+    rows = gz.store.Store(hub.data_dir).ledger_rows([repo], state="open")
+    secret = [r for r in rows if r["kind"] == "audit" and r.get("advisory") == "secret"]
+    return {"secrets": len(secret), "vulnerable": sum(1 for r in rows if r["kind"] == "dependency"),
+            "code": sum(1 for r in rows if r["kind"] == "audit" and r.get("advisory") != "secret")}
 
 
 @step()
@@ -222,8 +232,8 @@ def check_repo():
     if sweep.get("problem"):
         notes.append(sweep["problem"])
     secrets, refuted = flow.verify_secrets(settings, repo, deps.get("profile", ""), sweep)
-    if secrets:
-        first_secret_record(repo, secrets, stamp)
+    if not sweep.get("problem"):
+        first_secret_record(repo, secrets, stamp, refuted)
     page = flow.publish_repo_page(repo, notes)["page"]
 
     # 2. A first look at the riskiest code, capped.
@@ -249,10 +259,15 @@ def check_repo():
     if previews:
         page = flow.publish_repo_page(repo, notes, previews)["page"]
 
+    # The page's numbers (every open finding), so chat and page always agree.
+    shown = page_counts(repo)
+    if dep_summary:
+        dep_summary["vulnerable"] = shown["vulnerable"]
     out = {"repo": repo, "page": page, **dep_summary,
-           "secrets": len(secrets) if not sweep.get("problem") else "not checked",
-           "secrets_refuted_by_second_pass": refuted,
-           "code_findings": len(look["new"]), "code_refuted_by_second_pass": look["refuted"],
+           "secrets": shown["secrets"] if not sweep.get("problem") else "not checked",
+           "secrets_refuted_by_second_pass": len(refuted),
+           "code_findings": shown["code"], "new_code_findings": len(look["new"]),
+           "code_refuted_by_second_pass": look["refuted"],
            "first_look": f"{look['parts_read']} of {look['parts_total']} parts",
            "pull_request_previews": previews or pulls["note"], "not_checked": notes}
     def count(n, word: str) -> str:
@@ -262,7 +277,7 @@ def check_repo():
 
     out["answer"] = (f"Checked {repo}: {count(out['secrets'], 'secret')}, "
                      f"{count(dep_summary.get('vulnerable', 'not checked'), 'vulnerable package')}, "
-                     f"{count(out['code_findings'], 'code finding')} from a first look at "
-                     f"{out['first_look']}. The page has the details: {page}"
+                     f"{count(out['code_findings'], 'code finding')} ({out['new_code_findings']} new from a first "
+                     f"look at {out['first_look']}). The page has the details: {page}"
                      + (f" Not checked: {'; '.join(notes)}." if notes else ""))
     return out

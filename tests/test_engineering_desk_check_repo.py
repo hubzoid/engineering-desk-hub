@@ -99,3 +99,29 @@ def test_files_without_pinned_versions_are_checked_not_missing(hub):
     assert count({"deps": 3, "files": 1}) == 3
     assert count({"deps": 0, "files": 2}) == "0: no exact version pinned in 2 dependency files"
     assert count({"deps": 0, "files": 0}) == "not checked: no dependency file found"
+
+
+def test_a_first_check_leaves_its_findings_for_the_next_watch_to_email_once(hub):
+    """"Check my repo" sends no email, so it saves findings unalerted: the next
+    security watch emails them once, and not again."""
+    h.run_local(h.wf(hub, "check_repo"), hub_dir=hub, inputs={"repo": "storefront"})
+    store = h.lib(hub).store.Store(hub / ".hubzoid" / "data")
+    deps = store.ledger_rows([REPO], kind="dependency")
+    assert deps and all(not r["alerted_at"] for r in deps)
+    watch = h.wf(hub, "security_watch")
+    first = h.run_local(watch, hub_dir=hub, trigger="schedule")
+    assert first.emails and "pyyaml" in first.emails[0]["body"].lower()
+    again = h.run_local(watch, hub_dir=hub, trigger="schedule")
+    assert again.emails == []
+
+
+def test_chat_gives_the_pages_numbers(hub):
+    """The page shows every open finding; the answer says the same numbers,
+    with what this run found new beside them."""
+    first = h.run_local(h.wf(hub, "check_repo"), hub_dir=hub, inputs={"repo": "storefront"}).value
+    second = h.run_local(h.wf(hub, "check_repo"), hub_dir=hub, inputs={"repo": "storefront"}).value
+    rows = h.lib(hub).store.Store(hub / ".hubzoid" / "data").ledger_rows([REPO], state="open")
+    code = sum(1 for r in rows if r["kind"] == "audit" and r.get("advisory") != "secret")
+    assert second["code_findings"] == code and second["code_findings"] >= first["new_code_findings"]
+    assert f"{code} code finding" in second["answer"] and f"({second['new_code_findings']} new" in second["answer"]
+    assert second["vulnerable"] == sum(1 for r in rows if r["kind"] == "dependency")

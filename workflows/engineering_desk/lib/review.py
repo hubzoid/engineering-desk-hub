@@ -276,6 +276,7 @@ ICONS = {"bug": "🐛 Bug", "security": "🔒 Security", "tests": "🧪 Tests", 
 # A secret scanner that did not run is said at the top of the summary: the
 # change was then checked for secrets by Engineering Desk's own patterns only.
 SCANNER_DOWN = re.compile(r"^gitleaks: (not installed|timed out|no SARIF)")
+HIDES_SECRETS = re.compile(r"^gitleaks: this change edits (\S+), which hides secrets")
 RUN_NOTE = re.compile(r"^(CI |[\w.-]+: (\d+ result\(s\) on added lines|not installed, skipped|timed out, skipped|"
                       r"no SARIF output|skipped; custom commands|custom command opted in))")
 SUGGESTION_CHARS = 400         # one line
@@ -363,6 +364,10 @@ def summary(view: dict, pr: dict, commands: bool) -> str:
     if down:
         out += ["", "> ⚠️ **The secret scanner did not run** (" + "; ".join(down)
                 + "). Secrets in this change were checked by Engineering Desk's own patterns only."]
+    hides = [m.group(1) for n in view.get("notes") or [] if (m := HIDES_SECRETS.match(n))]
+    if hides:
+        out += ["", f"> ⚠️ **This change edits `{hides[0]}`**, which tells Gitleaks to ignore secrets. "
+                "Engineering Desk scanned without it: check why each entry is there."]
     if view.get("summary"):
         out += ["", "## 📝 Summary", f"- {sentence(view['summary'])}"]
     if view.get("paused"):

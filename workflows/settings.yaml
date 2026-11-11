@@ -5,9 +5,10 @@
 
 engineering_desk:
   version: 2                # nothing runs on its own until a repo below turns it on
-  # sample: the fictional kestrel-oak/storefront repo, never touches GitHub.
+  # local: folders on this machine (each repo below sets path:), no token needed.
   # github: the repos below, read with the GITHUB_TOKEN secret (or a GitHub App).
-  source: github
+  # sample: the fictional kestrel-oak/storefront repo, never touches GitHub.
+  source: local
   # poll: every 2 minutes, no public URL needed. webhook: instant, needs a
   # GitHub webhook (SETUP.md, "Instant reviews").
   trigger: poll
@@ -23,7 +24,11 @@ engineering_desk:
   #   security  daily dependency watch and weekly deep audit, with alerts
   #   reports   weekly digest and the monthly code and delivery reports
   repos: []
-  # repos:
+  # repos:                       # with source: local
+  #   - name: me/ios-app         # any owner/name label
+  #     path: ~/code/ios-app     # a git working copy
+  #     security: true
+  # repos:                       # with source: github
   #   - name: your-org/api
   #     reviews: true
   #     security: true
