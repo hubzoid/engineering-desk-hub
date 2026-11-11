@@ -93,3 +93,52 @@ def test_a_missing_gitleaks_never_blocks_a_commit(monkeypatch, capsys):
     monkeypatch.setattr(check, "scanners", lambda: Offline)
     assert check.main() == 0
     assert "secret check skipped" in capsys.readouterr().err
+
+
+def _desk_copy(tmp_path: Path) -> Path:
+    """A copy of the Desk's hook files and scanner code, to move and break."""
+    desk = tmp_path / "desk"
+    shutil.copytree(HOOKS, desk / "client" / "hooks")
+    lib = desk / "workflows" / "engineering_desk" / "lib"
+    lib.mkdir(parents=True)
+    shutil.copy(h.TEMPLATE / "workflows" / "engineering_desk" / "lib" / "scanners.py", lib / "scanners.py")
+    return desk
+
+
+@pytest.mark.parametrize("break_it", ["python", "check", "scanners"])
+def test_a_moved_or_broken_desk_never_blocks_a_commit(repo, tmp_path, break_it):
+    desk = _desk_copy(tmp_path)
+    python = tmp_path / "venv-python"
+    python.symlink_to(sys.executable)  # the Desk's .venv Python, about to be rebuilt
+    out = subprocess.run([str(python), str(desk / "client" / "hooks" / "install.py"), str(repo)],
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stdout + out.stderr
+    if break_it == "python":
+        python.unlink()
+    elif break_it == "check":
+        (desk / "client" / "hooks" / "secret_check.py").unlink()
+    else:
+        (desk / "workflows" / "engineering_desk" / "lib" / "scanners.py").write_text("raise ImportError('moved')\n")
+    (repo / "notes.txt").write_text("hello\n")
+    env = _env(tmp_path, ENGINEERING_DESK_SCANNERS=str(tmp_path / "scanners"))
+    subprocess.run(["git", "-C", str(repo), "add", "notes.txt"], check=True, env=env)
+    done = subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "notes"], capture_output=True, text=True,
+                          env=env)
+    assert done.returncode == 0, done.stderr
+    assert "Engineering Desk: secret check skipped" in done.stderr
+
+
+def test_only_a_secret_found_blocks(repo, tmp_path):
+    """The check's exit code for a secret is 10; a crash (exit 1) never blocks."""
+    desk = _desk_copy(tmp_path)
+    (desk / "client" / "hooks" / "secret_check.py").write_text("import sys\nsys.exit(10)\n")
+    assert subprocess.run([sys.executable, str(desk / "client" / "hooks" / "install.py"), str(repo)],
+                          capture_output=True).returncode == 0
+    (repo / "a.txt").write_text("a\n")
+    env = _env(tmp_path)
+    subprocess.run(["git", "-C", str(repo), "add", "a.txt"], check=True, env=env)
+    assert subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "a"], capture_output=True,
+                          env=env).returncode != 0
+    (desk / "client" / "hooks" / "secret_check.py").write_text("raise RuntimeError('broken')\n")
+    done = subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", "a"], capture_output=True, text=True, env=env)
+    assert done.returncode == 0 and "it could not run, exit 1" in done.stderr

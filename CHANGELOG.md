@@ -113,6 +113,8 @@ the move from the old names.
   same four steps, never asking for a secret. Needs Hubzoid 2.0.8.
 - **Local checks.** An opt-in commit hook (`client/hooks/install.py`) runs
   Gitleaks on the staged changes, in seconds with no model, and stops a
-  commit that contains a secret; a missing Gitleaks never blocks a commit.
+  commit that contains a secret; a missing Gitleaks, or a Desk that was moved
+  or whose Python was rebuilt, never blocks a commit: the hook says the check
+  was skipped.
   SETUP.md and the README now show "review my diff with the Engineering
   Desk" from Claude Code or Codex, before opening a pull request.

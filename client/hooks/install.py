@@ -29,9 +29,32 @@ def hook_path(repo: Path) -> Path:
     return path if path.is_absolute() else repo / path
 
 
+BLOCKED = 10  # secret_check.py's exit code for a secret found; anything else never blocks
+
+
 def script() -> str:
-    return (f"#!/bin/sh\n{MARKER} (opt-in). Turn it off: python {Path(__file__).resolve()} <repo> --remove\n"
-            f'exec "{sys.executable}" "{CHECK}"\n')
+    """The hook. A missing Desk (moved, deleted, its .venv rebuilt) or a check
+    that cannot run lets the commit through with a note: only a secret found
+    (exit 10) stops it."""
+    off = f"python {Path(__file__).resolve()} <repo> --remove"
+    return f"""#!/bin/sh
+{MARKER} (opt-in). Turn it off: {off}
+PY="{sys.executable}"
+CHECK="{CHECK}"
+if [ ! -x "$PY" ] || [ ! -f "$CHECK" ]; then
+  echo "Engineering Desk: secret check skipped (Desk not found at $CHECK or its Python at $PY). Turn it off: {off}" >&2
+  exit 0
+fi
+"$PY" "$CHECK"
+status=$?
+if [ "$status" -eq {BLOCKED} ]; then
+  exit 1
+fi
+if [ "$status" -ne 0 ]; then
+  echo "Engineering Desk: secret check skipped (it could not run, exit $status)." >&2
+fi
+exit 0
+"""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -50,7 +73,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if hook.exists() and not ours:
         print(f"{hook} already exists and is not Engineering Desk's; it was left as it is.\n"
-              f"To add the check, put this line in it:\n  \"{sys.executable}\" \"{CHECK}\" || exit 1")
+              f"To add the check, put this line in it:\n"
+              f"  \"{sys.executable}\" \"{CHECK}\"; [ $? -ne {BLOCKED} ] || exit 1")
         return 1
     hook.parent.mkdir(parents=True, exist_ok=True)
     hook.write_text(script())
