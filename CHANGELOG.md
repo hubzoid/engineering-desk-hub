@@ -57,3 +57,41 @@ the move from the old names.
 - Chat tools name their hub folder, so they work in evals and over MCP, and
   the three evals run as `admin@localhost`.
 - The Desk no longer imports a private part of Hubzoid (`_file_lock`).
+- **Every language.** The deep audit, repo profiles and code search read
+  every text file, whatever its language (Swift, Objective-C, Kotlin, Dart,
+  C and C++ included), instead of a fixed list. They skip vendored and
+  build folders (now also `Pods/`, `Carthage/`, `.build/`, `DerivedData/`,
+  `.gradle/` and others), binary files, and for the audit lockfiles,
+  documentation, data and generated Xcode files.
+- **"Not checked", never "0 issues".** A repo where the audit can read no
+  file is reported as not checked, and is never recorded as a clean audit.
+  The security watch says the same for a repo with no dependency file.
+- **Scanners for everyone.** Gitleaks 8.30.1 and Trivy 0.76.1 are
+  downloaded on first use from their GitHub releases, checked against a
+  pinned SHA-256, and kept in a cache outside the hub's data folder.
+  `hubzoid hub doctor .` shows which build runs, and `setup_check` fetches
+  them. A machine that cannot download uses the tool on PATH. A review whose
+  secret scanner did not run says so at the top. The sample never downloads.
+- **Every dependency file.** The security watch lists packages with Trivy,
+  so Swift (`Package.resolved`), CocoaPods (`Podfile.lock`), Maven, NuGet,
+  Dart and others are checked, not only Python, npm, Go, Rust, Ruby and PHP.
+  Indirect packages count too: each file's dependency tree is followed to
+  the end, so `qs` under `express` is checked like `express` itself.
+  OSV.dev still supplies the advisories; CocoaPods, which it does not cover,
+  gets them from Trivy's database, downloaded only for repos that have a
+  `Podfile.lock`. Without Trivy the Desk's own readers run, and any other
+  dependency file is reported as not checked.
+- **Secrets are double-checked.** A secret the pattern sweep or Gitleaks
+  finds in a pull request is a finding that now goes through the second
+  pass, like the model's own: a fake key in a test fixture is dropped with
+  the reason under Run details, and a real one is kept. Dependency
+  advisories and team-rule patterns are still not second-guessed.
+- **Weekly secret scan.** Each full deep audit runs Gitleaks over the whole
+  default branch. The audit's second pass checks every hit before anyone is
+  alerted. A scan that could not run is a coverage problem: a Gitleaks that
+  exits with an error or prints nothing is "not checked", never "no secrets".
+- **`.gitleaksignore` can't hide a secret.** A repo's own `.gitleaksignore`
+  still applies to Gitleaks, so the whole-repo scan reports each entry it
+  lists as a secret, marked as hidden, for the second pass to judge. A pull
+  request is scanned without its `.gitleaksignore`, and one that edits the
+  file is flagged at the top of the review.

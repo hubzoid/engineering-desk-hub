@@ -244,7 +244,7 @@ the defaults.
 | `review.auto_pause_after` | `0`: keep reviewing | Pause a busy pull request after this many pushes |
 | `limits.model_calls_per_day` | `400` | Work over the limit is shown, not dropped |
 | `reports.evidence_prs` | `100` diffs per report | Bigger or smaller reports |
-| `analyzers` | Ruff and Gitleaks when installed | Your own SARIF tools, with `allow_project_code: true` only for trusted commands |
+| `analyzers` | Ruff when installed, and Gitleaks (a pinned build, downloaded on first use) | Your own SARIF tools, with `allow_project_code: true` only for trusted commands |
 
 ## 12. Troubleshooting and costs
 

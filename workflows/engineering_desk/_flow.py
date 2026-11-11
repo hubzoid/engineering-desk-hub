@@ -236,9 +236,13 @@ def prepare(repo: str, number: int, force: bool = False) -> dict:
     diff_text, left_out = gz.diff.format_diff(review_files, rc.max_diff_chars, built=built)
     sweep = gz.checks.sweep(review_files)
     analyzer_hits, notes = gz.checks.run_analyzers(review_files, lambda p: gh.file(repo, p, head),
-                                                   [a.model_dump() for a in settings.analyzers])
+                                                   [a.model_dump() for a in settings.analyzers],
+                                                   download=settings.source != "sample")
+    # Secrets from the pattern sweep and from Gitleaks are findings; the second pass confirms or refutes each.
+    secrets = [c for c in sweep + analyzer_hits if c["secret"]]
+    analyzer_hits = [c for c in analyzer_hits if not c["secret"]]
     code_findings = [{**f, "checked": True} for f in
-                     gz.checks.secret_findings(sweep) + gz.rules.code_checks(rules_now, review_files)]
+                     gz.checks.secret_findings(secrets) + gz.rules.code_checks(rules_now, review_files)]
     own = gh.login()
     talk = [{"author": c["author"], "body": c["body"][:400]} for c in gh.discussion(repo, number)
             if c["author_type"] != "Bot" and "<!-- engineering-desk:" not in c["body"]][-30:]
@@ -276,7 +280,7 @@ def prepare(repo: str, number: int, force: bool = False) -> dict:
         job["notes"].append("CI " + job["ci"])
     store.save_review(repo, number, **meta, state="reviewing", pushes=pushes)
     if gz.audit.SENSITIVE.search(" ".join(reviewed_paths)):
-        store.queue_audit(repo, [p for p in reviewed_paths if gz.audit.SENSITIVE.search(p) and gz.audit.CODE.search(p)])
+        store.queue_audit(repo, [p for p in reviewed_paths if gz.audit.SENSITIVE.search(p) and gz.audit.auditable(p)])
     return {"job": job, "all_ignored": not keep}
 
 
@@ -616,7 +620,7 @@ def on_push(repo: str, changed: list[dict]) -> dict:
         store.mark_profile_stale(repo, reason)
         out["profile"] = reason
     paths = [c["filename"] for c in changed if c.get("status") != "removed"
-             and gz.audit.SENSITIVE.search(c["filename"]) and gz.audit.CODE.search(c["filename"])]
+             and gz.audit.SENSITIVE.search(c["filename"]) and gz.audit.auditable(c["filename"])]
     store.queue_audit(repo, paths)
     out["audit_queued"] = len(paths)
     watched = set(gz.rules.REVIEW_MD) | set(gz.rules.CONVENTIONS) | set(gz.rules.EXTRA_CONVENTIONS)

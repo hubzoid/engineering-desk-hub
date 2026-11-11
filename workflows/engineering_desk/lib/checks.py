@@ -75,12 +75,16 @@ SAFE_RUNS = {
 }
 
 
-def run_analyzers(files: list[dict], read_head, analyzers: list[dict]) -> tuple[list[dict], list[str]]:
+def run_analyzers(files: list[dict], read_head, analyzers: list[dict],
+                  download: bool = True) -> tuple[list[dict], list[str]]:
     """Scan untrusted data with isolated presets; custom commands require opt-in.
 
     Config and ignore files remain scan targets, but never control the presets.
     Custom commands are NOT sandboxed and can execute project configuration.
+    Gitleaks is the pinned build (scanners.py), downloaded on first use unless
+    `download` is off (the sample), then the one on PATH.
     """
+    from . import scanners
     if not analyzers:
         return [], []
     checks, notes = [], []
@@ -97,6 +101,10 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict]) -> tuple[
         ignore.write_text("")
         for f in files:
             if f.get("status") == "removed":
+                continue
+            if Path(f["filename"]).name == ".gitleaksignore":
+                notes.append(f"gitleaks: this change edits {f['filename']}, which hides secrets from Gitleaks; "
+                             "Engineering Desk scanned without it")
                 continue
             target = (root / f["filename"]).resolve()
             if root not in target.parents:
@@ -115,9 +123,13 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict]) -> tuple[
             if not preset and not a.get("allow_project_code", False):
                 notes.append(f"{name}: skipped; custom commands require allow_project_code: true and may execute PR code")
                 continue
-            exe = shutil.which(cmd[0])
+            if preset and tool in scanners.PINS:
+                found = scanners.find(tool, download=download)
+                exe = found.path
+            else:
+                found, exe = None, shutil.which(cmd[0])
             if exe is None:
-                notes.append(f"{name}: not installed, skipped")
+                notes.append(f"{name}: not installed, skipped" + (f" ({found.note})" if found else ""))
                 continue
             if preset:
                 cmd = [exe, *(str(root) if x == "." else x for x in cmd[1:])]
@@ -138,13 +150,18 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict]) -> tuple[
             except json.JSONDecodeError:
                 notes.append(f"{name}: no SARIF output (exit {proc.returncode})")
                 continue
-            hits = [c for c in parse_sarif(doc, name, root) if (c["path"], c["line"]) in added]
+            if tool == "gitleaks" and preset and proc.returncode != 0:  # --exit-code 0: anything else failed
+                notes.append(f"{name}: no SARIF output (exit {proc.returncode})")
+                continue
+            hits = [c for c in parse_sarif(doc, name, root, secret=tool == "gitleaks") if (c["path"], c["line"]) in added]
             checks += hits
             notes.append(f"{name}: {len(hits)} result(s) on added lines")
     return checks, notes
 
 
-def parse_sarif(doc: dict, tool: str, root: Path | None = None) -> list[dict]:
+def parse_sarif(doc: dict, tool: str, root: Path | None = None, secret: bool = False) -> list[dict]:
+    """SARIF results as checks. A secret scanner's results are secrets: they
+    become findings, which the second pass then confirms or refutes."""
     out = []
     for run in doc.get("runs") or []:
         for r in run.get("results") or []:
@@ -155,5 +172,91 @@ def parse_sarif(doc: dict, tool: str, root: Path | None = None) -> list[dict]:
                 uri = os.path.relpath(real, root) if real.startswith(str(root)) else uri
             out.append({"tool": tool, "rule": r.get("ruleId") or "", "level": r.get("level") or "warning",
                         "path": uri.removeprefix("./"), "line": (loc.get("region") or {}).get("startLine"),
-                        "secret": False, "message": ((r.get("message") or {}).get("text") or "")[:300]})
+                        "secret": secret, "message": ((r.get("message") or {}).get("text") or "")[:300]})
+    return out
+
+
+class ScanError(RuntimeError):
+    pass
+
+
+def secret_scan(root: Path, gitleaks: str, history: bool = False, timeout: int = 600) -> list[dict]:
+    """Every secret Gitleaks finds in a whole checkout, or with `history` in
+    every commit of a git working copy. The repo's own Gitleaks config and
+    allow markers never apply, as in the pull request preset. Vendored and
+    build folders are left out; tests and fixtures are kept for the second
+    pass to judge."""
+    from .security import SKIP_DIRS
+    with tempfile.TemporaryDirectory(prefix="engineering-desk-") as tmp:
+        control = Path(tmp)
+        (control / "gitleaks.toml").write_text("[extend]\nuseDefault = true\n")
+        (control / "gitleaksignore").write_text("")
+        cmd = [gitleaks, "git" if history else "dir", str(root), "--report-format", "json", "--report-path", "-",
+               "--no-banner", "--exit-code", "0", "--redact", "--config", str(control / "gitleaks.toml"),
+               "--gitleaks-ignore-path", str(control / "gitleaksignore"), "--ignore-gitleaks-allow"]
+        env = {k: v for k, v in os.environ.items() if k in ("PATH", "LANG", "LC_ALL", "TMPDIR")}
+        env.update(HOME=str(control), XDG_CONFIG_HOME=str(control))
+        try:
+            proc = subprocess.run(cmd, cwd=control, env=env, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            raise ScanError(f"Gitleaks took over {timeout} s") from None
+        # Run with --exit-code 0, so any other exit is a failure. A clean scan
+        # prints "[]": no output at all is a failure too, never "no secrets".
+        if proc.returncode != 0 or not proc.stdout.strip():
+            why = (proc.stderr.strip().splitlines() or ["no output"])[-1]
+            raise ScanError(f"Gitleaks failed (exit {proc.returncode}): {ANSI.sub('', why)[:200]}")
+        try:
+            rows = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            raise ScanError(f"Gitleaks printed no report (exit {proc.returncode})") from None
+    out, seen = [], set()
+    for r in rows:
+        path = str(r.get("File") or "")
+        if os.path.isabs(path):
+            path = os.path.relpath(os.path.realpath(path), os.path.realpath(root))
+        if path.startswith("..") or any(p in SKIP_DIRS for p in path.split("/")[:-1]):
+            continue
+        hit = (path, r.get("StartLine"), r.get("RuleID") or "secret", (r.get("Commit") or "")[:12])
+        if hit not in seen:
+            seen.add(hit)
+            out.append({"path": hit[0], "line": hit[1], "rule": hit[2], "commit": hit[3]})
+    # Gitleaks always reads the scanned folder's own .gitleaksignore, so a
+    # repo can hide its secrets from it. Each entry names the file, rule and
+    # line: report those too, marked as hidden, for the second pass to judge.
+    for hit in gitleaks_ignored(root):
+        key = (hit["path"], hit["line"], hit["rule"], hit["commit"])
+        if key not in seen and (hit["commit"] or (Path(root) / hit["path"]).is_file()):
+            seen.add(key)
+            out.append(hit)
+    return out
+
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def gitleaks_ignored(root: Path) -> list[dict]:
+    """The entries of a repo's own .gitleaksignore: `file:rule:line`, or
+    `commit:file:rule:line` for a scan of the history."""
+    source = Path(root) / ".gitleaksignore"
+    if not source.is_file():
+        return []
+    out = []
+    real = os.path.realpath(root)
+    for raw in source.read_text(errors="replace").splitlines():
+        entry = raw.strip()
+        if not entry or entry.startswith("#"):
+            continue
+        head, _, line = entry.rpartition(":")
+        head, _, rule = head.rpartition(":")
+        commit, _, path = head.partition(":")
+        if not SHA.match(commit):
+            commit, path = "", head
+        if not (head and rule and line.isdigit()):
+            continue
+        if os.path.isabs(path):
+            path = os.path.relpath(os.path.realpath(path), real)
+        if path.startswith("..") or not path:
+            continue
+        out.append({"path": path, "line": int(line), "rule": rule, "commit": commit[:12], "hidden": True})
     return out

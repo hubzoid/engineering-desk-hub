@@ -21,7 +21,23 @@ from .untrusted import fence
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 SENSITIVE = re.compile(r"(?i)(auth|login|session|permission|admin|role|acl|rbac|payment|billing|invoice|secret|token|"
                        r"crypto|password|upload|export|webhook|exec|eval|serial|pickle|sql|query|middleware|guard|api)")
-CODE = re.compile(r"\.(py|js|jsx|ts|tsx|mjs|cjs|go|rb|php|java|kt|rs|cs)$")
+# The audit reads every text file the checkout lists, in any language, except
+# these: lockfiles (the security watch reads those), documentation, data, and
+# files a tool generates (Xcode projects and interface files, localisations,
+# snapshots, source maps).
+NOT_AUDITED = re.compile(
+    r"(?i)(^|/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|npm-shrinkwrap\.json|go\.sum|Podfile\.lock|"
+    r"Package\.resolved|Cartfile\.resolved|composer\.lock|Gemfile\.lock|Cargo\.lock|poetry\.lock|uv\.lock|"
+    r"Pipfile\.lock|pubspec\.lock|mix\.lock|packages\.lock\.json|gradle\.lockfile|LICEN[CS]E[^/]*|"
+    r"CHANGELOG[^/]*|AUTHORS[^/]*|NOTICE[^/]*)$|"
+    r"\.(lock|md|markdown|mdx|rst|txt|adoc|csv|tsv|log|svg|map|snap|pbxproj|xcworkspacedata|xcscheme|"
+    r"storyboard|xib|strings|stringsdict|xcstrings|po|pot|mo|ipynb)$")
+
+
+def auditable(rel: str) -> bool:
+    """A file the audit reads, when it is a text file: any language, never a
+    lockfile, documentation or data."""
+    return not NOT_AUDITED.search(rel)
 BATCH_CHARS = 40_000
 KINDS = ("authorization", "secret", "backdoor", "injection", "other")
 NEARBY = 20  # outside any function, an open finding of the same kind this close is the same finding
@@ -79,7 +95,7 @@ def select(root: Path, profile: dict | None, queued: list[str], done: list[str],
     ranked: list[str] = []
     candidates = []
     for rel, path in text_files(root):
-        if not CODE.search(rel) or NOT_SOURCE.search(rel):
+        if not auditable(rel) or NOT_SOURCE.search(rel):
             continue
         if any(match_glob(rel, g) for g in exclude) or generated(path):
             if skipped is not None:
@@ -200,6 +216,35 @@ def gate(findings: list[dict], paths: set[str]) -> list[dict]:
         kind = str(f.get("kind", "other")).lower()
         kept.append({**f, "severity": sev, "kind": kind if kind in KINDS else "other"})
     return kept
+
+
+def secret_findings(hits: list[dict]) -> list[dict]:
+    """Audit findings from the whole-repo secret scan, before the second pass
+    judges each one. A secret found in an older commit stays in the history
+    after it is deleted, so the finding names the commit."""
+    out = []
+    for h in hits:
+        where = f" in commit {h['commit'][:7]}" if h.get("commit") else ""
+        hidden = " It is hidden from Gitleaks by the repo's .gitleaksignore." if h.get("hidden") else ""
+        out.append({"path": h["path"], "line": h["line"], "kind": "secret", "severity": "high", "confidence": "high",
+                    "body": f"A secret ({h['rule']}) is committed here{where}.{hidden} Rotate it, then load it from "
+                            "the environment or a secret store" + (", and remove it from the history." if where else "."),
+                    "evidence": f"Gitleaks rule {h['rule']} at line {h['line']}{where}"
+                                + (", listed in .gitleaksignore" if h.get("hidden") else "")})
+    return out
+
+
+def windows_around(root: Path, findings: list[dict], radius: int = 15) -> list[list]:
+    """The lines around each finding, for the second pass: [path, text, offset]."""
+    out = []
+    for f in findings:
+        source = Path(root) / f["path"]
+        if not source.is_file():
+            continue
+        lines = source.read_text(errors="replace").splitlines(keepends=True)
+        start = max(0, (f.get("line") or 1) - 1 - radius)
+        out.append([f["path"], "".join(lines[start:start + 2 * radius + 1])[:BATCH_CHARS // 4], start])
+    return out
 
 
 def key(repo: str, f: dict) -> str:

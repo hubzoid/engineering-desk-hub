@@ -27,8 +27,12 @@ from .untrusted import fence
 OSV_BATCH = "https://api.osv.dev/v1/querybatch"
 OSV_VULN = "https://api.osv.dev/v1/vulns/"
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+# Folders of other people's code or of build output, never read: vendored
+# dependencies (npm, Composer, CocoaPods, Carthage, Bower), virtual environments,
+# and what a build writes (Xcode, SwiftPM, Gradle, Dart, Next and Nuxt).
 SKIP_DIRS = {"node_modules", "vendor", ".git", "venv", ".venv", "dist", "build", "__pycache__", "site-packages",
-             ".tox", "target", "third_party"}
+             ".tox", "target", "third_party", "Pods", "Carthage", "bower_components", "DerivedData", ".build",
+             ".swiftpm", ".gradle", ".dart_tool", ".next", ".nuxt", ".svelte-kit", ".terraform"}
 RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "unknown": 1}
 PYPI_MODULE = {"pyyaml": "yaml", "beautifulsoup4": "bs4", "pillow": "PIL", "python-dateutil": "dateutil",
                "scikit-learn": "sklearn", "opencv-python": "cv2", "pyjwt": "jwt", "python-dotenv": "dotenv",
@@ -228,6 +232,185 @@ def dependencies(files: dict[str, str]) -> tuple[list[dict], list[str]]:
         except (ValueError, tomllib.TOMLDecodeError, yaml.YAMLError) as exc:
             problems.append(f"{path}: could not be read ({type(exc).__name__})")
     return deps, problems
+
+
+# ------------------------------------------------------------------ Trivy
+
+# Package types Trivy reads (purl type) and the OSV.dev ecosystem for each.
+# CocoaPods has no OSV ecosystem: its advisories come from Trivy's own database.
+PURL_ECOSYSTEM = {"pypi": "PyPI", "npm": "npm", "golang": "Go", "cargo": "crates.io", "gem": "RubyGems",
+                  "composer": "Packagist", "maven": "Maven", "nuget": "NuGet", "pub": "Pub", "hex": "Hex",
+                  "swift": "SwiftURL", "conan": "ConanCenter", "cocoapods": "CocoaPods"}
+OSV_ECOSYSTEMS = {e for e in PURL_ECOSYSTEM.values() if e != "CocoaPods"}
+# Dependency files only Trivy reads. Without it they are "not checked".
+TRIVY_ONLY = ("Podfile.lock", "Package.resolved", "pom.xml", "gradle.lockfile", "packages.lock.json",
+              "pubspec.lock", "mix.lock", "conan.lock")
+
+
+class ScannerError(RuntimeError):
+    pass
+
+
+def purl_dep(purl: str) -> tuple[str, str, str] | None:
+    """(ecosystem, name, version) from a package URL Trivy wrote, or None for a
+    type OSV.dev and Trivy's database cannot look up."""
+    from urllib.parse import unquote
+    m = re.match(r"^pkg:([^/]+)/(.+?)@([^?#]+)", purl or "")
+    if not m or m.group(1) not in PURL_ECOSYSTEM:
+        return None
+    kind, path, version = m.group(1), unquote(m.group(2)), unquote(m.group(3))
+    namespace, _, name = path.rpartition("/")
+    eco = PURL_ECOSYSTEM[kind]
+    if kind == "pypi":
+        return eco, pypi_name(name), version
+    if kind == "maven":
+        return eco, f"{namespace}:{name}", version
+    return eco, path if namespace else name, version
+
+
+def _skip_dirs() -> list[str]:
+    return [f"**/{d}" for d in sorted(SKIP_DIRS | FIXTURE_DIRS)]
+
+
+def _trivy(trivy: str, root: Path, cache: Path, args: list[str], timeout: int) -> dict:
+    """Trivy on a checkout: static reading of dependency files only (no project
+    code runs, no network for Maven parents), JSON out."""
+    import subprocess
+    cmd = [trivy, "fs", "--quiet", "--offline-scan", "--cache-dir", str(cache),
+           *[x for d in _skip_dirs() for x in ("--skip-dirs", d)], *args, str(root)]
+    env = {k: v for k, v in __import__("os").environ.items() if k in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR")}
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
+    except subprocess.TimeoutExpired:
+        raise ScannerError(f"Trivy took over {timeout} s") from None
+    if proc.returncode != 0:
+        raise ScannerError(f"Trivy failed: {(proc.stderr.strip().splitlines() or ['no message'])[-1][:200]}")
+    try:
+        return json.loads(proc.stdout)
+    except ValueError:
+        raise ScannerError("Trivy printed no JSON") from None
+
+
+def _kept(rel: str, exclude: list[str], skipped: list[str] | None) -> bool:
+    from .rules import match_glob
+    parts = rel.split("/")[:-1]
+    if any(p in SKIP_DIRS for p in parts):
+        return False
+    if any(p.lower() in FIXTURE_DIRS for p in parts) or any(match_glob(rel, g) for g in exclude):
+        if skipped is not None and rel not in skipped:
+            skipped.append(rel)
+        return False
+    return True
+
+
+def trivy_dependencies(root: Path, trivy: str, cache: Path, exclude: list[str] = (),
+                       skipped: list[str] | None = None, timeout: int = 300) -> list[dict]:
+    """Every pinned package in every dependency file Trivy reads (Swift,
+    CocoaPods, Maven, NuGet, Dart and the rest), listed without its
+    vulnerability database: seconds, and no download. Vendored, test and
+    excluded folders are left out as in `manifest_files`.
+
+    A file lists only its direct packages; the indirect ones hang off those,
+    so each file's graph is walked to the end. A package no file reaches is
+    kept under the file of its type, never dropped."""
+    from collections import deque
+    sbom = _trivy(trivy, Path(root), cache, ["--format", "cyclonedx"], timeout)
+    comps = {c.get("bom-ref"): c for c in sbom.get("components") or []}
+    files = {ref: c.get("name") for ref, c in comps.items() if c.get("type") == "application" and c.get("name")}
+    graph = {e.get("ref"): e.get("dependsOn") or [] for e in sbom.get("dependencies") or []}
+    deps, seen, reached = [], set(), set()
+
+    def add(ref: str, rel: str) -> None:
+        purl = (comps.get(ref) or {}).get("purl") or (ref if str(ref).startswith("pkg:") else "")
+        dep = purl_dep(purl)
+        if dep and dep not in seen:
+            seen.add(dep)
+            deps.append({"ecosystem": dep[0], "name": dep[1], "version": dep[2], "file": rel})
+
+    for file_ref, rel in files.items():
+        kept = _kept(rel, list(exclude), skipped)
+        queue, visited = deque(graph.get(file_ref, [])), set()
+        while queue:
+            ref = queue.popleft()
+            if ref in visited:
+                continue
+            visited.add(ref)
+            reached.add(ref)
+            if kept:
+                add(ref, rel)
+            queue.extend(graph.get(ref, []))
+
+    def prop(c: dict, name: str) -> str:
+        return next((x.get("value", "") for x in c.get("properties") or [] if x.get("name") == name), "")
+
+    by_type: dict[str, list[str]] = {}
+    for ref, rel in files.items():
+        by_type.setdefault(prop(comps[ref], "aquasecurity:trivy:Type"), []).append(rel)
+    for ref, c in comps.items():
+        if c.get("type") != "library" or ref in reached:
+            continue
+        rels = sorted(by_type.get(prop(c, "aquasecurity:trivy:PkgType"), []))
+        if len(rels) == 1 and not _kept(rels[0], list(exclude), None):
+            continue
+        add(ref, rels[0] if len(rels) == 1 else ", ".join(rels) or "a dependency file")
+    return deps
+
+
+def _trivy_advisory(v: dict, dep: dict) -> dict:
+    ids = sorted({v["VulnerabilityID"], *(v.get("VendorIDs") or [])})
+    score = max((c.get("V3Score") or 0 for c in (v.get("CVSS") or {}).values()), default=0) or None
+    sev = str(v.get("Severity") or "").lower()
+    fixed = sorted({f.strip() for f in str(v.get("FixedVersion") or "").split(",") if f.strip()}, key=_vkey)
+    later = [f for f in fixed if _safe_lt(dep["version"], f)] or fixed
+    return {"id": v["VulnerabilityID"], "ids": ids, "cves": [i for i in ids if i.startswith("CVE-")],
+            "summary": " ".join((v.get("Title") or v.get("Description") or "").split())[:300],
+            "severity": sev if sev in ("critical", "high", "medium", "low") else "unknown", "score": score,
+            "fixed": later[0] if later else None, "url": v.get("PrimaryURL") or ""}
+
+
+def trivy_cocoapods(root: Path, trivy: str, cache: Path, deps: list[dict], timeout: int = 900) -> list[dict]:
+    """Advisories for CocoaPods packages, which OSV.dev does not cover, from
+    Trivy's vulnerability database (GitHub's advisories, matched by Trivy).
+    The database is downloaded on first use and refreshed by Trivy; only
+    repos with a Podfile.lock ever need it."""
+    wanted = {(d["file"], d["name"], d["version"]): d for d in deps if d["ecosystem"] == "CocoaPods"}
+    if not wanted:
+        return []
+    report = _trivy(trivy, Path(root), cache, ["--scanners", "vuln", "--format", "json"], timeout)
+    out = []
+    for result in report.get("Results") or []:
+        if result.get("Type") != "cocoapods":
+            continue
+        by_pkg: dict[tuple, list[dict]] = {}
+        for v in result.get("Vulnerabilities") or []:
+            dep = wanted.get((result.get("Target"), v.get("PkgName"), v.get("InstalledVersion")))
+            if dep:
+                by_pkg.setdefault((dep["name"], dep["version"]), []).append(_trivy_advisory(v, dep))
+        for (name, version), advs in by_pkg.items():
+            dep = wanted[(result["Target"], name, version)]
+            out += [{**a, "dep": dep} for a in merge_aliases(advs)]
+    return out
+
+
+def list_dependencies(root: Path, manifests: dict[str, str], trivy: str | None, cache: Path | None,
+                      exclude: list[str] = (), skipped: list[str] | None = None,
+                      note: str = "") -> tuple[list[dict], list[str], str]:
+    """The repo's packages and any problem reading them, and how they were
+    read. Trivy reads every dependency file type. Without it (the sample,
+    or a machine where it could not be installed) the Desk's own readers
+    cover Python, npm, Go, Rust, Ruby and PHP, and any other dependency file
+    is reported as not checked, never passed over in silence."""
+    if trivy:
+        try:
+            return trivy_dependencies(root, trivy, cache, exclude, skipped), [], "Trivy"
+        except ScannerError as exc:
+            note = str(exc)
+    deps, problems = dependencies(manifests)
+    others = sorted(p.relative_to(root).as_posix() for name in TRIVY_ONLY for p in Path(root).rglob(name)
+                    if p.is_file() and _kept(p.relative_to(root).as_posix(), list(exclude), None))
+    if others:
+        problems.append(f"not checked without Trivy ({note or 'not installed'}): " + ", ".join(others[:10]))
+    return deps, problems, "the Desk's own readers"
 
 
 # ------------------------------------------------------------------- CVSS
@@ -455,7 +638,10 @@ class Feeds:
         return self._kev
 
     def advisories(self, deps: list[dict]) -> list[dict]:
-        """Every advisory for every dependency, aliases merged per package."""
+        """Every advisory for every dependency OSV.dev covers, aliases merged
+        per package. OSV.dev rejects a whole batch over one ecosystem it does
+        not know, so CocoaPods (read through Trivy instead) is never sent."""
+        deps = [d for d in deps if d["ecosystem"] in OSV_ECOSYSTEMS]
         hits = self.query(deps)
         out = []
         for dep, ids in zip(deps, hits):
