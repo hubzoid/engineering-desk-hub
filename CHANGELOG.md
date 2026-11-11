@@ -106,8 +106,10 @@ the move from the old names.
   the code uses them, the top code findings (each double-checked), and
   what was checked and what was not. Check my repo publishes it, and
   refreshes every repo's page daily at 07:30 from what the security watch
-  and the deep audit found (no scan, no model call). A page whose data did
-  not change stores no new copy. Secrets the second pass judged not real are
+  and the deep audit found (no scan, no model call). Update now on a page
+  rescans secrets and dependencies first. A check from chat writes your own
+  copy, and its answer also links the team page, updated daily. A page whose
+  data did not change stores no new copy. Secrets the second pass judged not real are
   listed, folded away, with its reason, and secrets a repo's
   `.gitleaksignore` hides are shown and counted.
 - **Check my repo** (`check_repo`, in chat and Runs): a first result on your

@@ -93,7 +93,7 @@ engineering_desk:
       security: true
 ```
 
-Then give yourself the tool (`hubzoid grant admin@localhost wf_check_repo .`) and ask *"Check my repo"*. Secrets and vulnerable dependencies are on the repo page within a minute, and a first look at the riskiest code follows within a few more, each finding double-checked. Nothing is posted anywhere.
+Then ask *"Check my repo"* in chat (as the owner, you can already run it). Secrets and vulnerable dependencies are on the repo page within a minute, and a first look at the riskiest code follows within a few more, each finding double-checked. Nothing is posted anywhere.
 
 Before you push: `python client/hooks/install.py ~/code/ios-app` stops a commit that contains a secret (opt-in, seconds, no model), and *"review my diff with the Engineering Desk"* from Claude Code or Codex reviews your changes before a pull request, posting nothing. [Local checks](SETUP.md#before-you-push-two-local-checks)
 

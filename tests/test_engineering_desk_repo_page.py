@@ -81,3 +81,26 @@ def test_the_watch_and_the_audit_publish_no_repo_page(hub):
     for name in ("security_watch", "deep_audit"):
         r = h.run_local(h.wf(hub, name), hub_dir=hub, trigger="schedule")
         assert not any((a.get("key") or "").startswith("repo-") for a in r.artifacts), name
+
+
+def test_chat_links_the_team_page_once_a_team_run_has_published_it(hub):
+    """A check from chat can only write the person's own copy. Its answer also
+    gives the team's page, which the daily run keeps up to date."""
+    check = h.wf(hub, "check_repo")
+    mine = h.run_local(check, hub_dir=hub, inputs={"repo": "storefront"})  # from chat: the person's run
+    assert "The team page appears after the daily 07:30 refresh." in mine.value["answer"]
+    team = h.run_local(check, hub_dir=hub, trigger="schedule").value["refreshed"][REPO]  # the 07:30 team run
+    again = h.run_local(check, hub_dir=hub, inputs={"repo": "storefront"}).value
+    assert again["team_page"] == team and f"The team page, updated daily: {team}" in again["answer"]
+
+
+def test_update_now_rescans_secrets_and_dependencies(hub):
+    """The 07:30 run only redraws; Update now on the page runs the fast part of
+    the check first, so something new shows up without waiting for the watch."""
+    check = h.wf(hub, "check_repo")
+    redraw = h.run_local(check, hub_dir=hub, trigger="schedule")
+    page = next(a for a in redraw.artifacts if (a.get("key") or "").startswith("repo-"))
+    assert "pyyaml" not in page["html"].lower() and redraw.value["rescanned"] is False
+    update = h.run_local(check, hub_dir=hub, trigger="update")
+    page = next(a for a in update.artifacts if (a.get("key") or "").startswith("repo-"))
+    assert update.value["rescanned"] is True and "pyyaml" in page["html"].lower()
