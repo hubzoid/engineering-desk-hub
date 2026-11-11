@@ -56,16 +56,45 @@ def test_with_nothing_chosen_each_card_says_what_to_do(hub):
     checks = _checks()
     _settings(hub, {"version": 2, "source": "github", "repos": []})
     ctx = {"hub_dir": str(hub)}
-    assert _short(checks.settings(ctx))[1:] == (
-        "Not chosen yet", "Choose a folder or repos in workflows/settings.yaml, or ask your coding agent to")
+    assert _short(checks.settings(ctx)) == (
+        "warn", "Not chosen yet", "Add repos: in workflows/settings.yaml, or ask your coding agent")
     assert _short(checks.github(ctx)) == ("fail", "Not connected", "Add GITHUB_TOKEN to .env (SETUP.md, step 2)")
-    assert _short(checks.schedules(ctx)) == ("fail", "Off", "Add HUBZOID_SCHEDULES=1 to .env and restart")
+    assert _short(checks.schedules(ctx)) == ("warn", "Nothing to run yet", "Choose your code first: see the Code card")
+
+
+def test_a_fresh_clone_asks_for_a_folder_first(hub, monkeypatch):
+    """The shipped settings: source: local, no folder yet. The first card that
+    needs the user is Code, not GitHub; "Needs you" is warn or fail."""
+    import shutil
+    shutil.copy(h.TEMPLATE / "workflows" / "settings.yaml", hub / "workflows" / "settings.yaml")
+    (hub / ".env").write_text((h.TEMPLATE / ".env.example").read_text())
+    checks, ctx = _checks(), {"hub_dir": str(hub)}
+    assert _short(checks.settings(ctx)) == (
+        "warn", "Choose a folder", "Set path: in workflows/settings.yaml, or ask your coding agent")
+    assert _short(checks.github(ctx)) == ("info", "Not needed yet", "Only for PR reviews")
+    assert _short(checks.schedules(ctx)) == ("warn", "Nothing to run yet", "Choose your code first: see the Code card")
+
+
+@pytest.mark.parametrize("make, line", [(None, "Folder not found"), ("plain", "Not a git repo"),
+                                        ("empty-git", "No commit yet")])
+def test_a_folder_that_cannot_be_read_needs_you(hub, tmp_path, make, line):
+    folder = tmp_path / "ios-app"
+    if make:
+        folder.mkdir()
+    if make == "empty-git":
+        subprocess.run(["git", "-C", str(folder), "init", "-q"], check=True)
+    _settings(hub, {"version": 2, "source": "local", "repos": [{"name": "me/ios-app", "path": str(folder),
+                                                               "security": True}]})
+    status, got, detail = _short(_checks().settings({"hub_dir": str(hub)}))
+    assert (status, got) == ("warn", line) and detail.endswith("ios-app")
 
 
 def test_a_local_folder_is_ready_and_github_can_wait(hub, tmp_path):
     folder = tmp_path / "ios-app"
     folder.mkdir()
     subprocess.run(["git", "-C", str(folder), "init", "-q", "-b", "main"], check=True)
+    subprocess.run(["git", "-C", str(folder), "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-q",
+                    "--allow-empty", "-m", "start"], check=True)
     _settings(hub, {"version": 2, "source": "local", "repos": [{"name": "me/ios-app", "path": str(folder),
                                                                "security": True}]})
     (hub / ".env").write_text("HUBZOID_SCHEDULES=1\n")
@@ -73,7 +102,7 @@ def test_a_local_folder_is_ready_and_github_can_wait(hub, tmp_path):
     status, line, detail = _short(checks.settings(ctx))
     assert (status, detail) == ("ok", "Branch main") and line.startswith("…/") and line.endswith("/ios-app")
     assert checks._short_path(str(checks.Path.home() / "code" / "ios-app"), 60) == "~/code/ios-app"
-    assert _short(checks.github(ctx)) == ("info", "Not connected", "Needed only for PR reviews")  # later, not a failure
+    assert _short(checks.github(ctx)) == ("info", "Not needed yet", "Only for PR reviews")  # later, not a failure
     assert _short(checks.schedules(ctx)) == ("ok", "Security watch and audit on",
                                              "Dependencies daily, the audit and secret scan weekly")
 
@@ -84,6 +113,8 @@ def test_github_repos_and_schedules_on(hub):
     (hub / ".env").write_text("HUBZOID_SCHEDULES=1\n")
     checks, ctx = _checks(), {"hub_dir": str(hub)}
     assert _short(checks.settings(ctx))[1:] == ("acme/api and 1 more", "On GitHub")
+    assert _short(checks.schedules(ctx)) == ("ok", "Reviews on", "Pull requests every 2 minutes")  # what is on
+    _settings(hub, {"version": 2, "source": "github", "repos": [{"name": "acme/api", "reviews": True, "security": True}]})
     assert _short(checks.schedules(ctx)) == ("ok", "Reviews and security watch on",
                                              "Reviews every 2 minutes, security daily")
 

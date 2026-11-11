@@ -18,10 +18,11 @@ The Get started cards on a new chat show four steps; walk the same four, in
 order, and stop at the first that is not done:
 
 1. **Model**: Claude Code or Codex signed in on this machine (Hubzoid checks it).
-2. **Code**: a local folder (`source: local`, `path:`) or GitHub repos under
-   `repos:` in `workflows/settings.yaml`. A local folder needs no token.
-3. **GitHub**: only for pull request reviews. "Later" is fine with a local
-   folder. The token goes in the hub's `.env` (SETUP.md, step 2).
+2. **Code**: a fresh clone reads a local folder (`source: local`): add it
+   under `repos:` with its `path:` in `workflows/settings.yaml`. It needs no
+   token. GitHub repos (`source: github`) come second.
+3. **GitHub**: only for pull request reviews. "Not needed yet" is fine with
+   a local folder. The token goes in the hub's `.env` (SETUP.md, step 2).
 4. **Automatic checks**: `HUBZOID_SCHEDULES=1` in `.env`, then restart.
 
 Never ask for a token, key or password in chat, and never repeat one someone
