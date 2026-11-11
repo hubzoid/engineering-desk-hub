@@ -122,6 +122,7 @@ def test_chat_gives_the_pages_numbers(hub):
     second = h.run_local(h.wf(hub, "check_repo"), hub_dir=hub, inputs={"repo": "storefront"}).value
     rows = h.lib(hub).store.Store(hub / ".hubzoid" / "data").ledger_rows([REPO], state="open")
     code = sum(1 for r in rows if r["kind"] == "audit" and r.get("advisory") != "secret")
-    assert second["code_findings"] == code and second["code_findings"] >= first["new_code_findings"]
+    assert second["code_findings"] == code and first["new_code_findings"] == first["code_findings"]
+    assert second["new_code_findings"] <= second["code_findings"]  # never more new than on the page
     assert f"{code} code finding" in second["answer"] and f"({second['new_code_findings']} new" in second["answer"]
     assert second["vulnerable"] == sum(1 for r in rows if r["kind"] == "dependency")
