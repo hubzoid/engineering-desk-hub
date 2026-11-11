@@ -119,6 +119,9 @@ def normalize(f: dict) -> dict:
         f[key] = value if value in allowed else default
     f["path"] = f.get("path") if isinstance(f.get("path"), str) else ""
     f["line"] = f.get("line") if isinstance(f.get("line"), int) and f["line"] > 0 else None
+    start = f.get("start_line")
+    f["start_line"] = (start if isinstance(start, int) and f["line"] and 0 < start < f["line"]
+                       and f["line"] - start < SUGGESTION_LINES else None)
     f["body"] = " ".join((f.get("body") or "").split())
     f["suggestion"] = f.get("suggestion") if isinstance(f.get("suggestion"), str) else ""
     f["rule"] = re.sub(r"\s*\((?:applies to )?[^()]*\*[^()]*\)$", "", (f.get("rule") or "").strip())[:200]
@@ -144,6 +147,8 @@ def gate(findings: list[dict], lines: set[tuple[str, int]], floor: str, limit: i
             continue
         if f["line"] is not None and (f["path"], f["line"]) not in lines:
             continue
+        if f["start_line"] and not spans(f, lines):
+            f = {**f, "start_line": None}  # a range GitHub can't comment on: one line, and no several-line suggestion
         if f["line"] is None and f["path"] and not any(p == f["path"] for p, _ in lines):
             continue
         seen.add(key)
@@ -266,7 +271,9 @@ ICONS = {"bug": "🐛 Bug", "security": "🔒 Security", "tests": "🧪 Tests", 
 # Analyzer and CI notes describe the run; any other note means part of the review is missing.
 RUN_NOTE = re.compile(r"^(CI |[\w.-]+: (\d+ result\(s\) on added lines|not installed, skipped|timed out, skipped|"
                       r"no SARIF output|skipped; custom commands|custom command opted in))")
-SUGGESTION_CHARS = 400
+SUGGESTION_CHARS = 400         # one line
+SUGGESTION_RANGE_CHARS = 2000  # several lines, start_line to line
+SUGGESTION_LINES = 15          # the most lines one suggestion replaces
 
 
 def category_label(category: str) -> str:
@@ -297,11 +304,23 @@ def finding_row(f: dict) -> str:
     return f"- _{f['severity']}_ {where(f)} — {with_rule(f)}"
 
 
+def spans(f: dict, lines: set[tuple[str, int]]) -> bool:
+    """Whether every line from `start_line` to `line` can carry the comment.
+    GitHub takes a range only within one diff hunk, and the commentable lines
+    of a hunk are consecutive, so a range with no gap is inside one hunk."""
+    start = f.get("start_line")
+    return bool(start and f.get("line") and all((f["path"], n) in lines for n in range(start, f["line"] + 1)))
+
+
 def suggestion_block(f: dict) -> str:
-    """A committable GitHub suggestion that replaces the commented line with
-    one line, fenced so its text cannot close the block."""
+    """A committable GitHub suggestion that replaces the commented line (or the
+    lines from `start_line` to `line`), fenced so its text cannot close the block.
+    Text with several lines needs a range: on one line it would add lines GitHub
+    shows as a confusing replacement."""
     text = (f.get("suggestion") or "").rstrip("\n")
-    if not f.get("line") or not text.strip() or len(text) > SUGGESTION_CHARS or "\n" in text:
+    if not f.get("line") or not text.strip() or len(text) > (SUGGESTION_RANGE_CHARS if f.get("start_line") else SUGGESTION_CHARS):
+        return ""
+    if "\n" in text and not f.get("start_line"):
         return ""
     ticks = "`" * max(3, max((len(r) for r in re.findall(r"`+", text)), default=0) + 1)
     return f"\n\n{ticks}suggestion\n{text}\n{ticks}"

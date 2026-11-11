@@ -37,6 +37,9 @@ what the code does, no "consider". Cite the new-file line number from the
 diff.
 
 When the fix is a small mechanical change to that one line, put the corrected
-line in `suggestion`, exactly as it should read, with its indentation. Engineering Desk
-offers it as a one-click change only after the second pass confirms the
-finding. Leave it empty for anything larger.
+line in `suggestion`, exactly as it should read, with its indentation. When the
+fix changes a few consecutive lines (at most 15), set `start_line` to the first
+of them and `line` to the last, and put all the corrected lines in `suggestion`.
+Every line in that range must be in the diff. Engineering Desk offers it as a
+one-click change only after the second pass confirms the finding. Leave it
+empty for anything larger.

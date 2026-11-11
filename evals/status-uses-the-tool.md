@@ -1,6 +1,8 @@
 ---
 expect_tools: [engineering_desk_status]
 tags: [engineering_desk]
+# The tools answer signed-in people only: admin@localhost holds the engineering_desk grant (README).
+run_as: admin@localhost
 timeout: 180
 ---
 ## Prompt

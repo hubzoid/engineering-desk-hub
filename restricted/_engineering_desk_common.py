@@ -27,11 +27,11 @@ gz = _lib()
 
 def ctx():
     import hubzoid
-    user = hubzoid.current_user()
+    user = hubzoid.current_user(HUB_DIR)
     if user is None:
         raise PermissionError("Engineering Desk's tools answer signed-in people only.")
     settings, _ = gz.settings.read_file(HUB_DIR)
-    return user, settings, gz.store.Store(hubzoid.data_dir())
+    return user, settings, gz.store.Store(hubzoid.data_dir(HUB_DIR))
 
 
 def gh(settings, store):

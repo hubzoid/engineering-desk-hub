@@ -45,3 +45,15 @@ the move from the old names.
   `workflows/settings.yaml`.
 - Messages say Settings instead of Console.
 - Tests and CI live here, on Hubzoid 2.0.3 and the latest 2.x.
+- **GitHub hiccups.** Reads (and GraphQL queries, and repo downloads) are
+  retried with backoff when GitHub times out, drops the connection or
+  answers 500 to 504. Writes are never resent after a server error or a
+  dropped connection, because GitHub may already have applied them: the next
+  sweep republishes instead, so a review is never posted twice. A repo GitHub
+  did not answer for shows "retry next sweep", and no longer fails the run.
+- **Suggestions over several lines.** A one-click suggestion can replace up
+  to 15 consecutive lines (`start_line` to `line`), when every one of them is
+  in the diff. Otherwise the finding stays on its one line without it.
+- Chat tools name their hub folder, so they work in evals and over MCP, and
+  the three evals run as `admin@localhost`.
+- The Desk no longer imports a private part of Hubzoid (`_file_lock`).

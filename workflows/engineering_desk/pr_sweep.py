@@ -35,6 +35,13 @@ gz = flow.gz
 SAFETY_SWEEP = timedelta(minutes=30)
 
 
+def _error(repo: str, exc: Exception) -> dict:
+    row = {"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]}
+    if isinstance(exc, gz.github.Transient):
+        row["retry"] = "next sweep"
+    return row
+
+
 @step(max_attempts=2)
 def sweep_plan() -> dict:
     settings, store, gh = flow.ctx()
@@ -110,7 +117,7 @@ def sweep_plan() -> dict:
                         comments.append(c)
             repos.append({"repo": repo, "review": review, "comments": comments, "cursor": newest, "first": first})
         except Exception as exc:  # noqa: BLE001 - one unreachable repo never stops the others
-            errors.append({"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]})
+            errors.append(_error(repo, exc))
     skipped = [{"pr": f"{r['repo']}#{r['number']}", "reason": r.get("note") or r.get("pause_reason")}
                for r in store.reviews() if r["repo"] in settings.review_repos() and r["state"] in ("skipped", "paused")]
     return {"skipped": skipped, "repos": repos, "budget": settings.review.max_prs_per_run, "owner": f"sweep-{uuid.uuid4().hex[:12]}",
@@ -162,9 +169,12 @@ def pr_sweep():
         except Exception as exc:  # noqa: BLE001 - recorded; the next sweep retries
             if flow.account_lost(exc):
                 raise
-            out["errors"].append({"repo": repo, "error": f"{type(exc).__name__}: {exc}"[:300]})
+            out["errors"].append(_error(repo, exc))
         finally:
             flow.release(repo, p["owner"])
-    if out["errors"] and not (out["reviews"] or out["commands"]):
-        raise RuntimeError("; ".join(f"{e['repo']}: {e['error']}" for e in out["errors"]))
+    # A run fails only for a real problem. GitHub not answering is marked
+    # "retry next sweep", and the next sweep, two minutes later, tries again.
+    lasting = [e for e in out["errors"] if not e.get("retry")]
+    if lasting and not (out["reviews"] or out["commands"]):
+        raise RuntimeError("; ".join(f"{e['repo']}: {e['error']}" for e in lasting))
     return out
