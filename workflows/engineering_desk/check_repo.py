@@ -11,6 +11,11 @@
 The digest is not part of a first run. Results fill one repo page as they
 finish, behind one link that always shows the latest run. Ask in chat
 ("Check my repo"), or start it from the agent's Runs.
+
+Every day at 07:30, after the security watch (06:00) and the deep audit
+(03:00), a scheduled run refreshes each repo's page from what they found:
+no scan and no model call. check_repo is the only workflow that publishes
+repo pages, because a page key belongs to one workflow in Hubzoid.
 """
 from __future__ import annotations
 
@@ -185,21 +190,14 @@ def _first_look(settings, repo: str, plan: dict, stamp: str, deadline: float) ->
     return {"parts_read": len(read), "parts_total": plan["total"], "new": new, "refuted": refuted, "stopped": stopped}
 
 
-@workflow(inputs=RepoCheck, as_tool=True, tool_wait="5m", surfaces=("web", "owui", "mcp"))
-def check_repo():
-    """Check my repo: secrets and vulnerable dependencies first (seconds), then a
-    first look at the riskiest code (a few minutes, each finding double-checked),
-    then previews of the newest pull requests when GitHub is connected. Results
-    fill one repo page as they finish. Nothing is posted anywhere."""
-    settings = gz.settings.load(hub.setting("engineering_desk"))
-    try:
-        repo = _repo(settings, hub.input.repo if hub.input else None)
-    except ValueError as exc:
-        return {"refused": str(exc)}
-    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    notes: list[str] = []
+@step()
+def team_page_link(repo: str) -> str:
+    return flow.team_page(repo)
 
-    # 1. Secrets and dependencies: seconds, and published at once.
+
+def _fast(settings, repo: str, stamp: str, notes: list[str]) -> dict:
+    """Secrets and dependencies: seconds, no model call unless a secret needs
+    the second pass. Saved unalerted: the next security watch emails them."""
     deps = first_dependencies(repo)
     dep_summary: dict = {}
     if deps.get("error"):
@@ -217,6 +215,51 @@ def check_repo():
     secrets, refuted = flow.verify_secrets(settings, repo, deps.get("profile", ""), sweep)
     if not sweep.get("problem"):
         first_secret_record(repo, secrets, stamp, refuted)
+    return {"dep_summary": dep_summary, "sweep_problem": sweep.get("problem"), "refuted": refuted}
+
+
+def _refresh(settings, rescan: bool) -> dict:
+    """The scheduled run redraws each repo's page from the store, nothing
+    scanned. "Update now" on a page also rescans secrets and dependencies
+    first (the fast part of the check), for that run's repo or every repo."""
+    pages = {}
+    asked = hub.input.repo if hub.input else None
+    repos = [_repo(settings, asked)] if asked else settings.repo_names()
+    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    for repo in repos:
+        try:
+            notes: list[str] = []
+            if rescan:
+                _fast(settings, repo, stamp, notes)
+            pages[repo] = flow.publish_repo_page(repo, notes)["page"]
+        except Exception as exc:  # noqa: BLE001 - one page never stops the others
+            pages[repo] = f"not published: {type(exc).__name__}: {exc}"[:200]
+    return {"refreshed": pages, "rescanned": rescan}
+
+
+@workflow(inputs=RepoCheck, schedule="daily at 07:30", catch_up=True, as_tool=True, tool_wait="5m",
+          surfaces=("web", "owui", "mcp"))
+def check_repo():
+    """Check my repo: secrets and vulnerable dependencies first (seconds), then a
+    first look at the riskiest code (a few minutes, each finding double-checked),
+    then previews of the newest pull requests when GitHub is connected. Results
+    fill one repo page as they finish. Nothing is posted anywhere."""
+    settings = gz.settings.load(hub.setting("engineering_desk"))
+    if hub.trigger == "update":
+        return _refresh(settings, rescan=True)
+    if hub.trigger == "schedule" and not (hub.input and hub.input.repo):
+        return _refresh(settings, rescan=False)
+    try:
+        repo = _repo(settings, hub.input.repo if hub.input else None)
+    except ValueError as exc:
+        return {"refused": str(exc)}
+    stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    notes: list[str] = []
+
+    # 1. Secrets and dependencies: seconds, and published at once.
+    fast = _fast(settings, repo, stamp, notes)
+    dep_summary, refuted = fast["dep_summary"], fast["refuted"]
+    sweep = {"problem": fast["sweep_problem"]}
     page = flow.publish_repo_page(repo, notes)["page"]
 
     # 2. A first look at the riskiest code, capped.
@@ -253,8 +296,22 @@ def check_repo():
            "code_refuted_by_second_pass": look["refuted"],
            "first_look": f"{look['parts_read']} of {look['parts_total']} parts",
            "pull_request_previews": previews or pulls["note"], "not_checked": notes}
-    out["answer"] = (f"Checked {repo}: {out['secrets']} secrets, {dep_summary.get('vulnerable', 'not checked')} "
-                     f"vulnerable packages, {out['code_findings']} code findings ({out['new_code_findings']} new "
-                     f"from a first look at {out['first_look']}). The page has the details: {page}"
+    def count(n, word: str) -> str:
+        if not isinstance(n, int):
+            return f"{word}s: {n}"
+        return f"{n} {word}" + ("" if n == 1 else "s")
+
+    # From chat the page is the person's own copy; the team's copy, refreshed
+    # daily from the security watch and the audit, has its own link.
+    team = "" if hub.team_run else team_page_link(repo)
+    if not hub.team_run:
+        out["team_page"] = team or "after the daily 07:30 refresh"
+    out["answer"] = (f"Checked {repo}: {count(out['secrets'], 'secret')}, "
+                     f"{count(dep_summary.get('vulnerable', 'not checked'), 'vulnerable package')}, "
+                     f"{count(out['code_findings'], 'code finding')} ({out['new_code_findings']} new from a first "
+                     f"look at {out['first_look']}). {'The team page' if hub.team_run else 'Your copy of the page'} "
+                     f"has the details: {page}"
+                     + (f" The team page, updated daily: {team}" if team else
+                        " The team page appears after the daily 07:30 refresh." if not hub.team_run else "")
                      + (f" Not checked: {'; '.join(notes)}." if notes else ""))
     return out

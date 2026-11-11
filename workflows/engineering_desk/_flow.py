@@ -670,7 +670,21 @@ def publish_repo_page(repo: str, notes: list[str] | None = None, previews: list[
             [(c["check_name"], bool(c.get("last_ok")), c.get("last_error")) for c in coverage], notes, previews)
     art = gz.runtime.publish(hub, f"repo-{repo}", html, f"{repo} · repo check", key=repo_page_key(repo),
                              team_audience="hub", digest=gz.runtime.digest_of(gz.render.PAGE_VERSION, *data))
-    return {"repo": repo, "page": gz.runtime.link_of(art)}
+    link = gz.runtime.link_of(art)
+    if hub.team_run and link:
+        # A run from chat can only write the person's own copy; the team's copy
+        # has its own link, which chat then gives as "updated daily".
+        store.save_cursor(TEAM_PAGE + repo, link)
+    return {"repo": repo, "page": link, "team": bool(hub.team_run)}
+
+
+TEAM_PAGE = "team-page:"
+
+
+def team_page(repo: str) -> str:
+    """The link of the repo's team page, once a team run has published it."""
+    row = gz.store.Store(hub.data_dir).cursor(TEAM_PAGE + repo)
+    return (row or {}).get("value") or ""
 
 
 # ------------------------------------------------- checks shared by workflows
@@ -734,7 +748,8 @@ def dependency_scan(repo: str) -> dict:
         items.append(a)
     if problems:
         store.coverage_error(repo, "lockfiles", "; ".join(problems))
-    return {"repo": repo, "sha": sha, "deps": len(deps), "files": len(manifests), "read_with": read_with,
+    files = len(manifests) + len(gz.security.trivy_only_files(root, settings.exclude_for(repo)))
+    return {"repo": repo, "sha": sha, "deps": len(deps), "files": files, "read_with": read_with,
             "items": items, "unused": unused,
             "notes": notes,
             "complete": not problems, "profile": gz.profiles.text(store.profile(repo)), "skipped": skipped}

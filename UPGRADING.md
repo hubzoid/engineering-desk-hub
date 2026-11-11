@@ -29,6 +29,19 @@ shows the conflict for you (or your coding agent) to resolve.
 If `git pull` says your local changes would be overwritten, commit them first
 (`git commit -am "Our settings"`) and pull again, so Git merges both.
 
+**This update** needs Hubzoid 2.0.8, which `pip install -r requirements.txt`
+installs (restart `hubzoid run` afterwards, as above). Nothing in your
+`workflows/settings.yaml` has to change. Three things to know:
+
+- Gitleaks and Trivy are downloaded on first use into
+  `~/.cache/hubzoid/engineering-desk/scanners` (or `$ENGINEERING_DESK_SCANNERS`),
+  outside the hub, so backups stay small. `hubzoid hub doctor .` shows them.
+- The per-person activity report stays available to managers with the grant.
+  To turn it off for everyone, set `reports.people: false` under
+  `engineering_desk:`.
+- The deep audit now reads every language, so its first run after the update
+  may read more files than before (still within `audit.budget_minutes`).
+
 ## From GitZoid (the old names)
 
 This hub was called GitZoid until October 2026, in the `hubzoid/gitzoid-hub`

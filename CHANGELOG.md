@@ -104,11 +104,14 @@ the move from the old names.
 - **Repo page.** One page per repo, behind one link that always shows the
   latest run: secrets with file and line, vulnerable packages and whether
   the code uses them, the top code findings (each double-checked), and
-  what was checked and what was not. The security watch and the deep audit
-  refresh it after each repo; a page whose data did not change stores no
-  new copy. Secrets the second pass judged not real are listed, folded
-  away, with its reason, and secrets a repo's `.gitleaksignore` hides are
-  shown and counted.
+  what was checked and what was not. Check my repo publishes it, and
+  refreshes every repo's page daily at 07:30 from what the security watch
+  and the deep audit found (no scan, no model call). Update now on a page
+  rescans secrets and dependencies first. A check from chat writes your own
+  copy, and its answer also links the team page, updated daily. A page whose
+  data did not change stores no new copy. Secrets the second pass judged not real are
+  listed, folded away, with its reason, and secrets a repo's
+  `.gitleaksignore` hides are shown and counted.
 - **Check my repo** (`check_repo`, in chat and Runs): a first result on your
   own code in minutes. Secrets and dependencies first, on the repo page at
   once; then a first look at the riskiest code, capped at a few minutes,
@@ -126,3 +129,10 @@ the move from the old names.
   checks return each card's line. The chat suggests "Check my repo", "What
   is waiting or stuck right now?" and "See a sample review", and walks the
   same four steps, never asking for a secret. Needs Hubzoid 2.0.8.
+- **Local checks.** An opt-in commit hook (`client/hooks/install.py`) runs
+  Gitleaks on the staged changes, in seconds with no model, and stops a
+  commit that contains a secret; a missing Gitleaks, or a Desk that was moved
+  or whose Python was rebuilt, never blocks a commit: the hook says the check
+  was skipped.
+  SETUP.md and the README now show "review my diff with the Engineering
+  Desk" from Claude Code or Codex, before opening a pull request.
