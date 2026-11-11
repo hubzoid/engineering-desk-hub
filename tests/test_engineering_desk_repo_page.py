@@ -47,7 +47,9 @@ def test_a_check_with_a_problem_says_so_at_the_top():
     top = html.index("Part of this repo was not checked")
     assert top < html.index("<h2>Secrets</h2>") and "all 4 files are excluded" in html and "without Trivy" in html
     twice = gz.render.repo_page(REPO, "2026-11-08T10:00:00+00:00", [], coverage, ["not checked: all 4 files are excluded"])
-    assert twice.count("all 4 files are excluded") == 1  # a note that repeats a check's problem is said once
+    start = twice.index("Part of this repo was not checked")
+    warning = twice[start:twice.index("</p>", start)]
+    assert warning.count("all 4 files are excluded") == 1  # a note that repeats a check's problem is said once
 
 
 @pytest.fixture
