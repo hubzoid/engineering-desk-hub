@@ -1,0 +1,175 @@
+{
+ "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.7",
+ "serialNumber": "urn:uuid:4f33b6bf-94b6-452e-ac05-21103d5e7fe3",
+ "version": 1,
+ "metadata": {
+  "tools": {
+   "components": [
+    {
+     "type": "application",
+     "manufacturer": {
+      "name": "Aqua Security Software Ltd."
+     },
+     "group": "aquasecurity",
+     "name": "trivy",
+     "version": "0.76.1"
+    }
+   ]
+  },
+  "component": {
+   "bom-ref": "c9b85d8b-70de-4219-9278-520b3dc2ff29",
+   "type": "application",
+   "name": "poetry-app",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:SchemaVersion",
+     "value": "2"
+    }
+   ]
+  }
+ },
+ "components": [
+  {
+   "bom-ref": "8053b42a-f902-4622-9a00-69f790155ce0",
+   "type": "application",
+   "name": "poetry.lock",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:Class",
+     "value": "lang-pkgs"
+    },
+    {
+     "name": "aquasecurity:trivy:Type",
+     "value": "poetry"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:pypi/certifi@2026.10.23",
+   "type": "library",
+   "name": "certifi",
+   "version": "2026.10.23",
+   "purl": "pkg:pypi/certifi@2026.10.23",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:PkgID",
+     "value": "certifi@2026.10.23"
+    },
+    {
+     "name": "aquasecurity:trivy:PkgType",
+     "value": "poetry"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:pypi/chardet@3.0.4",
+   "type": "library",
+   "name": "chardet",
+   "version": "3.0.4",
+   "purl": "pkg:pypi/chardet@3.0.4",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:PkgID",
+     "value": "chardet@3.0.4"
+    },
+    {
+     "name": "aquasecurity:trivy:PkgType",
+     "value": "poetry"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:pypi/idna@2.7",
+   "type": "library",
+   "name": "idna",
+   "version": "2.7",
+   "purl": "pkg:pypi/idna@2.7",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:PkgID",
+     "value": "idna@2.7"
+    },
+    {
+     "name": "aquasecurity:trivy:PkgType",
+     "value": "poetry"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:pypi/requests@2.19.0",
+   "type": "library",
+   "name": "requests",
+   "version": "2.19.0",
+   "purl": "pkg:pypi/requests@2.19.0",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:PkgID",
+     "value": "requests@2.19.0"
+    },
+    {
+     "name": "aquasecurity:trivy:PkgType",
+     "value": "poetry"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:pypi/urllib3@1.23",
+   "type": "library",
+   "name": "urllib3",
+   "version": "1.23",
+   "purl": "pkg:pypi/urllib3@1.23",
+   "properties": [
+    {
+     "name": "aquasecurity:trivy:PkgID",
+     "value": "urllib3@1.23"
+    },
+    {
+     "name": "aquasecurity:trivy:PkgType",
+     "value": "poetry"
+    }
+   ]
+  }
+ ],
+ "dependencies": [
+  {
+   "ref": "8053b42a-f902-4622-9a00-69f790155ce0",
+   "dependsOn": [
+    "pkg:pypi/requests@2.19.0"
+   ]
+  },
+  {
+   "ref": "c9b85d8b-70de-4219-9278-520b3dc2ff29",
+   "dependsOn": [
+    "8053b42a-f902-4622-9a00-69f790155ce0"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/certifi@2026.10.23",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/chardet@3.0.4",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/idna@2.7",
+   "dependsOn": []
+  },
+  {
+   "ref": "pkg:pypi/requests@2.19.0",
+   "dependsOn": [
+    "pkg:pypi/certifi@2026.10.23",
+    "pkg:pypi/chardet@3.0.4",
+    "pkg:pypi/idna@2.7",
+    "pkg:pypi/urllib3@1.23"
+   ]
+  },
+  {
+   "ref": "pkg:pypi/urllib3@1.23",
+   "dependsOn": []
+  }
+ ],
+ "vulnerabilities": []
+}

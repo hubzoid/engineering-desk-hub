@@ -102,6 +102,10 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict],
         for f in files:
             if f.get("status") == "removed":
                 continue
+            if Path(f["filename"]).name == ".gitleaksignore":
+                notes.append(f"gitleaks: this change edits {f['filename']}, which hides secrets from Gitleaks; "
+                             "Engineering Desk scanned without it")
+                continue
             target = (root / f["filename"]).resolve()
             if root not in target.parents:
                 continue
@@ -144,6 +148,9 @@ def run_analyzers(files: list[dict], read_head, analyzers: list[dict],
                 notes.append(f"{name}: timed out, skipped")
                 continue
             except json.JSONDecodeError:
+                notes.append(f"{name}: no SARIF output (exit {proc.returncode})")
+                continue
+            if tool == "gitleaks" and preset and proc.returncode != 0:  # --exit-code 0: anything else failed
                 notes.append(f"{name}: no SARIF output (exit {proc.returncode})")
                 continue
             hits = [c for c in parse_sarif(doc, name, root, secret=tool == "gitleaks") if (c["path"], c["line"]) in added]
@@ -191,9 +198,15 @@ def secret_scan(root: Path, gitleaks: str, history: bool = False, timeout: int =
         env.update(HOME=str(control), XDG_CONFIG_HOME=str(control))
         try:
             proc = subprocess.run(cmd, cwd=control, env=env, capture_output=True, text=True, timeout=timeout)
-            rows = json.loads(proc.stdout or "[]")
         except subprocess.TimeoutExpired:
             raise ScanError(f"Gitleaks took over {timeout} s") from None
+        # Run with --exit-code 0, so any other exit is a failure. A clean scan
+        # prints "[]": no output at all is a failure too, never "no secrets".
+        if proc.returncode != 0 or not proc.stdout.strip():
+            why = (proc.stderr.strip().splitlines() or ["no output"])[-1]
+            raise ScanError(f"Gitleaks failed (exit {proc.returncode}): {ANSI.sub('', why)[:200]}")
+        try:
+            rows = json.loads(proc.stdout)
         except json.JSONDecodeError:
             raise ScanError(f"Gitleaks printed no report (exit {proc.returncode})") from None
     out, seen = [], set()
@@ -207,4 +220,43 @@ def secret_scan(root: Path, gitleaks: str, history: bool = False, timeout: int =
         if hit not in seen:
             seen.add(hit)
             out.append({"path": hit[0], "line": hit[1], "rule": hit[2], "commit": hit[3]})
+    # Gitleaks always reads the scanned folder's own .gitleaksignore, so a
+    # repo can hide its secrets from it. Each entry names the file, rule and
+    # line: report those too, marked as hidden, for the second pass to judge.
+    for hit in gitleaks_ignored(root):
+        key = (hit["path"], hit["line"], hit["rule"], hit["commit"])
+        if key not in seen and (hit["commit"] or (Path(root) / hit["path"]).is_file()):
+            seen.add(key)
+            out.append(hit)
+    return out
+
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+SHA = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+def gitleaks_ignored(root: Path) -> list[dict]:
+    """The entries of a repo's own .gitleaksignore: `file:rule:line`, or
+    `commit:file:rule:line` for a scan of the history."""
+    source = Path(root) / ".gitleaksignore"
+    if not source.is_file():
+        return []
+    out = []
+    real = os.path.realpath(root)
+    for raw in source.read_text(errors="replace").splitlines():
+        entry = raw.strip()
+        if not entry or entry.startswith("#"):
+            continue
+        head, _, line = entry.rpartition(":")
+        head, _, rule = head.rpartition(":")
+        commit, _, path = head.partition(":")
+        if not SHA.match(commit):
+            commit, path = "", head
+        if not (head and rule and line.isdigit()):
+            continue
+        if os.path.isabs(path):
+            path = os.path.relpath(os.path.realpath(path), real)
+        if path.startswith("..") or not path:
+            continue
+        out.append({"path": path, "line": int(line), "rule": rule, "commit": commit[:12], "hidden": True})
     return out

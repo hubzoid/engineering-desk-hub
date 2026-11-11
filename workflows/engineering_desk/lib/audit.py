@@ -225,10 +225,12 @@ def secret_findings(hits: list[dict]) -> list[dict]:
     out = []
     for h in hits:
         where = f" in commit {h['commit'][:7]}" if h.get("commit") else ""
+        hidden = " It is hidden from Gitleaks by the repo's .gitleaksignore." if h.get("hidden") else ""
         out.append({"path": h["path"], "line": h["line"], "kind": "secret", "severity": "high", "confidence": "high",
-                    "body": f"A secret ({h['rule']}) is committed here{where}. Rotate it, then load it from the "
-                            "environment or a secret store" + (", and remove it from the history." if where else "."),
-                    "evidence": f"Gitleaks rule {h['rule']} at line {h['line']}{where}"})
+                    "body": f"A secret ({h['rule']}) is committed here{where}.{hidden} Rotate it, then load it from "
+                            "the environment or a secret store" + (", and remove it from the history." if where else "."),
+                    "evidence": f"Gitleaks rule {h['rule']} at line {h['line']}{where}"
+                                + (", listed in .gitleaksignore" if h.get("hidden") else "")})
     return out
 
 
