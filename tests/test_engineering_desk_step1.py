@@ -214,3 +214,17 @@ def test_chat_tools_name_their_hub_folder():
     belongs to, so data_dir() needs the folder."""
     for path in HUB.joinpath("restricted").glob("*.py"):
         assert "data_dir()" not in path.read_text(), path
+
+
+def test_chat_tools_answer_outside_the_bridge(tmp_path, monkeypatch):
+    """`hubzoid eval run` and MCP call the tools with no HUBZOID_HUB_DIR set.
+    current_user() then needs the hub folder too, or every tool fails with
+    "No hub here" (seen on a real eval run)."""
+    from tests import engineering_desk_harness as h
+
+    h.isolate(monkeypatch)
+    hub = h.make_hub(tmp_path)
+    monkeypatch.delenv("HUBZOID_HUB_DIR", raising=False)
+    with h.as_person(h.PERSON, "web"):
+        out = h.invoke(h.tools(hub)["engineering_desk_status"])
+    assert json.loads(out)["source"] == "fictional sample repo", out
