@@ -73,7 +73,7 @@ hubzoid grant admin@localhost wf_delivery_report .
 hubzoid run .
 ```
 
-Open the address `hubzoid run` prints. Within two minutes the desk reviews the five sample pull requests: an endless retry, an unprotected admin export, unsafe SQL, a vulnerable package and one clean change. Nothing is posted anywhere. Ask in the web chat:
+Open the address `hubzoid run` prints. Within about five minutes (it first reads the repo for a short profile, then reviews) the desk reviews the five sample pull requests: an endless retry, an unprotected admin export, unsafe SQL, a vulnerable package and one clean change. Nothing is posted anywhere. Ask in the web chat:
 
 > What is waiting or stuck right now?
 
