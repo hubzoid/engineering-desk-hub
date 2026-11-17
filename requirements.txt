@@ -1,2 +1,4 @@
 # Engineering Desk runs on Hubzoid 2.0.8 or later within 2.x (2.0.8 shows the Get started cards).
 hubzoid>=2.0.8,<3
+# Python checks on changed files in each review (the ruff preset). Without it reviews still run, and say ruff was skipped.
+ruff>=0.15,<1
