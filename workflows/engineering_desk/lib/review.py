@@ -13,6 +13,15 @@ from . import diff, lifecycle, models
 from .untrusted import fence
 
 SUMMARY_MARKER = "<!-- engineering-desk:summary -->"
+#: The head a summary describes. The summary is edited in place, so this is
+#: what ties it to one commit (the Software Factory checks it before fixing).
+HEAD_MARKER = "<!-- engineering-desk:head:{sha} -->"
+
+
+def with_head(body: str, sha: str | None) -> str:
+    """First, so a reader that keeps only the start of a long summary still
+    sees which commit it describes."""
+    return f"{HEAD_MARKER.format(sha=sha)}\n{body}" if sha else body
 FINDING_MARKER = "<!-- engineering-desk:finding:{} -->"
 FINDING_PATTERN = r"<!-- engineering-desk:finding:([0-9a-f]{16}) -->"
 SEVERITY = {"high": 0, "medium": 1, "low": 2}
@@ -215,8 +224,13 @@ def status_for(mode: str, open_findings: list[dict], unreviewed: int = 0) -> tup
     text = (f"{plural(len(open_findings), 'open finding')}, {len(blocking)} blocking" if open_findings else "No open findings")
     if unreviewed:
         text = f"Partly reviewed: {plural(unreviewed, 'file')} not reviewed. {text}"
-    if mode == "gate" and (blocking or unreviewed):
+    # failure means at least one open blocking finding. A partly reviewed pull
+    # request is an error: it still fails a required check, but there is
+    # nothing for an author or the Software Factory to fix.
+    if mode == "gate" and blocking:
         return "failure", text
+    if mode == "gate" and unreviewed:
+        return "error", text
     return "success", text
 
 

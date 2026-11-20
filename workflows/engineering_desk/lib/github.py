@@ -527,6 +527,10 @@ class GitHub:
         self._write("POST", f"/repos/{repo}/{kind}/comments/{comment['id']}/reactions", {"content": content},
                     f"react {content}")
 
+    def comment_url(self, repo: str, number: int, comment_id: int | None) -> str | None:
+        return f"https://github.com/{repo}/pull/{number}#issuecomment-{comment_id}" if comment_id and comment_id > 0 \
+            else None
+
     def set_status(self, repo: str, sha: str, state: str, description: str, target_url: str | None = None) -> None:
         body = {"state": state, "description": description[:140], "context": "engineering-desk/review"}
         if target_url:

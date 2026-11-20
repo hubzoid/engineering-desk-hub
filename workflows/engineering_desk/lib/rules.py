@@ -161,7 +161,8 @@ def parse_review_md(text: str) -> dict:
         "ignore": _list(meta.get("ignore")),
         "focus": _list(meta.get("focus")),
         "skip_title": [s.lower() for s in _list(meta.get("skip_title"))],
-        "base_branches": _list(meta.get("base_branches")),
+        # None when the file does not say: settings decide. [] means every branch.
+        "base_branches": _list(meta.get("base_branches")) if "base_branches" in meta else None,
         "path_instructions": {str(k)[:200]: str(v)[:500] for k, v in list(paths.items())[:20]},
         "instructions": cap(body.strip()),
     }
@@ -189,12 +190,23 @@ def repo_controls(gh, repo: str) -> dict:
     return controls
 
 
+def with_settings(controls: dict, settings, repo: str) -> dict:
+    """The repo's controls with the settings' base_branches where its own
+    review.md says nothing. The file wins, then the repo setting, then the
+    hub default."""
+    if controls.get("base_branches") is not None:
+        return controls
+    return {**controls, "base_branches": settings.base_branches_for(repo) or []}
+
+
 def skip_reason(pr: dict, review_cfg, controls: dict) -> str | None:
     if controls.get("skip"):
         return f"the repo's {controls.get('review_md', 'review.md')} sets skip: true"
     if review_cfg.skip_drafts and pr.get("draft"):
         return "draft"
-    if review_cfg.skip_bots and (pr.get("author_type") == "Bot" or pr.get("author", "").endswith("[bot]")):
+    allowed = {b.lower() for b in getattr(review_cfg, "review_bots", None) or []}
+    if review_cfg.skip_bots and (pr.get("author_type") == "Bot" or pr.get("author", "").endswith("[bot]")) \
+            and (pr.get("author") or "").lower() not in allowed:
         return f"opened by a bot ({pr['author']})"
     if review_cfg.skip_label and review_cfg.skip_label in pr.get("labels", []):
         return f"labelled {review_cfg.skip_label}"

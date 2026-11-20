@@ -61,7 +61,7 @@ def sweep_plan() -> dict:
     for repo in ready:
         try:
             pulls = gh.open_pulls(repo)
-            repo_controls = flow.controls(gh, store, repo)
+            repo_controls = flow.controls(gh, store, repo, settings=settings)
             version = flow.configuration_version(settings, repo, repo_controls, hub_rules, guide, store.profile(repo))
             rows = {r["number"]: r for r in store.reviews(repo)}
             first = store.cursor(f"seen:{repo}") is None

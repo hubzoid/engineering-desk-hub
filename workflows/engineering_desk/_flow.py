@@ -47,29 +47,45 @@ def ctx():
     return settings, store, gh
 
 
-def controls(gh, store, repo: str, fresh: bool = False) -> dict:
+def controls(gh, store, repo: str, fresh: bool = False, settings=None) -> dict:
     """A repo's review.md and conventions, cached for an hour (a default-branch
-    push that touches them clears the cache)."""
-    key = f"controls:{repo}"
+    push that touches them clears the cache), with the settings'
+    base_branches where review.md says nothing."""
+    key = f"controls:v2:{repo}"     # v2: base_branches is None when review.md does not set it
     cached = store.cursor(key)
     if cached and cached["value"] and not fresh and time.time() - cached["value"]["at"] < CONTROLS_TTL:
-        return cached["value"]["controls"]
-    value = gz.rules.repo_controls(gh, repo)
-    store.save_cursor(key, {"at": time.time(), "controls": value})
-    return value
+        value = cached["value"]["controls"]
+    else:
+        value = gz.rules.repo_controls(gh, repo)
+        store.save_cursor(key, {"at": time.time(), "controls": value})
+    return gz.rules.with_settings(value, settings, repo) if settings is not None else value
 
 
 def rules_version(repo_controls: dict, hub_rules: list[dict], guide: str) -> str:
-    return gz.rules.fingerprint(repo_controls, hub_rules, guide)
+    return gz.rules.fingerprint(_controls_fp(repo_controls), hub_rules, guide)
 
 
 def configuration_version(settings, repo: str, repo_controls: dict, hub_rules: list, guide: str, profile: dict | None = None) -> str:
     # The switches and the profile wait decide what runs, not what a review saw:
     # turning reports on must not re-review every pull request, and hubs from
     # before these settings keep exactly the same fingerprint.
-    return gz.rules.fingerprint(repo_controls, hub_rules, guide, settings.review.model_dump(exclude={"wait_for_profile_minutes"}),
-                                settings.repo(repo).model_dump(exclude={"reviews", "security", "reports", "path"}), settings.context,
+    return gz.rules.fingerprint(_controls_fp(repo_controls), hub_rules, guide, _unset_new(settings.review.model_dump(exclude={"wait_for_profile_minutes"})),
+                                _unset_new(settings.repo(repo).model_dump(exclude={"reviews", "security", "reports", "path"})), settings.context,
                                 [a.model_dump() for a in settings.analyzers], settings.commands, gz.profiles.content(profile), hub.secret("MODEL", ""))
+
+
+#: Settings added after hubs had fingerprints. Left at their defaults they
+#: are not part of the fingerprint, so those hubs re-review nothing.
+NEW_DEFAULTS = {"base_branches": None, "review_bots": []}
+
+
+def _unset_new(dumped: dict) -> dict:
+    return {k: v for k, v in dumped.items() if not (k in NEW_DEFAULTS and v == NEW_DEFAULTS[k])}
+
+
+def _controls_fp(c: dict) -> dict:
+    # Before settings could set it, an absent base_branches read as [].
+    return {**c, "base_branches": []} if c.get("base_branches") is None else c
 
 
 def waiting_for_profile(settings, store, repo: str) -> bool:
@@ -187,7 +203,7 @@ def prepare(repo: str, number: int, force: bool = False) -> dict:
     if row.get("paused") and not force:
         store.save_review(repo, number, **meta)
         return {"skip": f"paused ({row.get('pause_reason') or 'by a command'})"}
-    repo_controls = controls(gh, store, repo)
+    repo_controls = controls(gh, store, repo, settings=settings)
     hub_rules = gz.rules.hub_rules(HUB_DIR)
     guide = gz.rules.guide(HUB_DIR)
     version = configuration_version(settings, repo, repo_controls, hub_rules, guide, store.profile(repo))
@@ -414,7 +430,8 @@ def post(view: dict, post_ids: list[str], commentable: list) -> dict:
     if open_now or view["fixed"] or view.get("paused") or settings.review.summary_on_clean:
         body = gz.review.summary(view, pr, view["commands"]) if (open_now or view["fixed"] or view.get("paused")) \
             else gz.review.clean_summary(view)
-        comment_id = gh.upsert_summary(repo, number, body, row.get("summary_comment_id"), gz.review.SUMMARY_MARKER)
+        comment_id = gh.upsert_summary(repo, number, gz.review.with_head(body, head), row.get("summary_comment_id"),
+                                       gz.review.SUMMARY_MARKER)
     else:
         comment_id = row.get("summary_comment_id")
     lines = {tuple(x) for x in commentable}
@@ -439,7 +456,7 @@ def post(view: dict, post_ids: list[str], commentable: list) -> dict:
     unreviewed = len(view.get("left_out") or []) + (1 if view.get("truncated") else 0)
     status = gz.review.status_for(view["status_mode"], open_now, unreviewed)
     if status:
-        gh.set_status(repo, head, status[0], status[1])
+        gh.set_status(repo, head, status[0], status[1], target_url=gh.comment_url(repo, number, comment_id))
     store.save_review(repo, number, summary_comment_id=comment_id if comment_id and comment_id > 0 else None,
                       status_posted=status[0] if status and not getattr(gh, "dry_run", False) else None,
                       published_sha=head if not getattr(gh, "dry_run", False) else row.get("published_sha"),
@@ -577,11 +594,12 @@ def refresh(repo: str, number: int) -> dict:
     fresh = build_view(store, job, view["summary"], view["suggestions"], [], view.get("dropped", []), paused)
     store.save_review(repo, number, view=fresh, verdict=fresh["verdict"])
     body = gz.review.summary(fresh, fresh["pr"], fresh["commands"])
-    comment_id = gh.upsert_summary(repo, number, body, row.get("summary_comment_id"), gz.review.SUMMARY_MARKER)
+    comment_id = gh.upsert_summary(repo, number, gz.review.with_head(body, fresh["sha"]), row.get("summary_comment_id"),
+                                   gz.review.SUMMARY_MARKER)
     unreviewed = len(fresh.get("left_out") or []) + (1 if fresh.get("truncated") else 0)
     status = gz.review.status_for(fresh["status_mode"], fresh["open"], unreviewed) if not paused else None
     if status:
-        gh.set_status(repo, fresh["sha"], status[0], status[1])
+        gh.set_status(repo, fresh["sha"], status[0], status[1], target_url=gh.comment_url(repo, number, comment_id))
     return {"refreshed": True, "summary_comment": comment_id, "status": status[0] if status else None}
 
 
