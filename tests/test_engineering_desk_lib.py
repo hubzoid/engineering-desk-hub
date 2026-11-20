@@ -645,4 +645,4 @@ def test_failure_always_means_a_blocking_finding():
     assert gz.review.status_for("gate", blocking, 0)[0] == "failure"
     assert gz.review.status_for("gate", blocking, 2)[0] == "failure"
     assert gz.review.status_for("gate", [], 2)[0] == "error"
-    assert gz.review.with_head("body", "a" * 40).endswith("<!-- engineering-desk:head:" + "a" * 40 + " -->")
+    assert gz.review.with_head("body", "a" * 40).startswith("<!-- engineering-desk:head:" + "a" * 40 + " -->")

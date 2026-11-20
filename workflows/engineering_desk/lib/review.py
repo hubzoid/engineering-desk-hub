@@ -19,7 +19,9 @@ HEAD_MARKER = "<!-- engineering-desk:head:{sha} -->"
 
 
 def with_head(body: str, sha: str | None) -> str:
-    return f"{body}\n{HEAD_MARKER.format(sha=sha)}" if sha else body
+    """First, so a reader that keeps only the start of a long summary still
+    sees which commit it describes."""
+    return f"{HEAD_MARKER.format(sha=sha)}\n{body}" if sha else body
 FINDING_MARKER = "<!-- engineering-desk:finding:{} -->"
 FINDING_PATTERN = r"<!-- engineering-desk:finding:([0-9a-f]{16}) -->"
 SEVERITY = {"high": 0, "medium": 1, "low": 2}

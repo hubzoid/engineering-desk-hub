@@ -57,9 +57,7 @@ engineering_desk:
     summary_on_clean: true      # a clean PR still gets the summary comment (what it does, suggestions)
     auto_pause_after: 0         # 0: keep reviewing pushes. A positive limit pauses busy PRs
     skip_label: engineering-desk-skip
-    status_check: report        # off · report: pending, then success with counts · gate: failure while blocking findings are open, error while partly reviewed
-    # review_bots: []            # bot logins reviewed even with skip_bots, such as the Software Factory's App
-    # base_branches: []          # review only pull requests into these branches (also per repo). Empty: every branch
+    status_check: report        # off · report: pending, then success with counts · gate: failure while blocking findings are open
 
   security:
     severity_floor: high        # plus anything CISA lists as exploited now, and advisories with no rating
