@@ -55,7 +55,7 @@ def test_missing_patch_does_not_hide_later_readable_file_or_pass_gate(hub, monke
     h.write_settings(hub, {"review": {"status_check": "gate"}})
     result = sweep(hub)
     clean = next(r for r in result.value["reviews"] if r["pr"].endswith("#104"))
-    assert clean["status"] == "failure"
+    assert clean["status"] == "error"         # fails the gate, with nothing for an author to fix
     view = store(hub).view(REPO, 104)
     assert view["reviewed_files"] == 0 and view["left_out"]
     clean_text = gz.review.clean_summary(view)
@@ -257,3 +257,23 @@ def test_low_severity_is_an_effective_opt_in():
     finding = {"path": "a.py", "line": 1, "severity": "low", "confidence": "high", "category": "tests", "body": "Missing edge-case test"}
     assert not gz.review.gate([finding], {("a.py", 1)}, "high", 8)
     assert gz.review.gate([finding], {("a.py", 1)}, "low", 8)
+
+
+def test_the_gate_status_links_the_summary_and_the_summary_names_its_head(hub):
+    from tests.test_engineering_desk_workflows import posted
+
+    h.write_settings(hub, {"review": {"status_check": "gate"}})
+    r = sweep(hub)
+    head = store(hub).view(REPO, 101)["sha"]
+    summary = posted(r, 101, "post summary")[0]["text"]
+    assert f"<!-- engineering-desk:head:{head} -->" in summary
+    status = posted(r, 101, "status failure")[0]
+    assert "#issuecomment-" in status["body"]["target_url"] and f"/{REPO}/pull/101" in status["body"]["target_url"]
+
+
+def test_base_branches_in_settings_skip_pull_requests_into_other_branches(hub):
+    h.write_settings(hub, {"review": {"base_branches": ["release"]}})
+    r = sweep(hub)
+    assert r.value["reviews"] == [] and not r.calls
+    notes = [row["note"] for row in store(hub).reviews(REPO)]
+    assert notes and all(n == "draft" or "targets main, not release" in n for n in notes), notes

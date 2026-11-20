@@ -246,6 +246,11 @@ class SampleGitHub:
         self._record("POST", f"/repos/{repo}/comments/{comment['id']}/reactions", {"content": content},
                      f"react {content}")
 
+    def comment_url(self, repo: str, number: int, comment_id: int | None) -> str | None:
+        return f"https://github.com/{repo}/pull/{number}#issuecomment-{comment_id}" if comment_id else None
+
     def set_status(self, repo: str, sha: str, state: str, description: str, target_url: str | None = None) -> None:
-        self._record("POST", f"/repos/{repo}/statuses/{sha}", {"state": state, "description": description,
-                                                               "context": "engineering-desk/review"}, f"status {state}")
+        body = {"state": state, "description": description, "context": "engineering-desk/review"}
+        if target_url:
+            body["target_url"] = target_url
+        self._record("POST", f"/repos/{repo}/statuses/{sha}", body, f"status {state}")

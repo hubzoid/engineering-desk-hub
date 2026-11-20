@@ -48,7 +48,7 @@ def diff_prepare(repo: str, diff_text: str) -> dict:
     files = gz.diff.parse_unified(diff_text)
     if not files:
         raise ValueError("That is not a unified diff. Send the output of `git diff`.")
-    repo_controls = flow.controls(gh, store, repo)
+    repo_controls = flow.controls(gh, store, repo, settings=settings)
     keep, ignored = gz.rules.reviewable(files, repo_controls)
     hub_rules = gz.rules.hub_rules(flow.HUB_DIR)
     rules_now = [r for r in hub_rules if any(gz.rules.rules_for([r], f["filename"]) for f in keep)]

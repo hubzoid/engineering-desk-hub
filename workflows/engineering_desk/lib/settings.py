@@ -42,6 +42,7 @@ class RepoSettings(_Strict):
     reviews: bool = False           # pull request reviews, follow-ups and /hubzoid commands
     security: bool = False          # dependency watch and deep audit, with alerts
     reports: bool = False           # weekly digest and the monthly code and delivery reports
+    base_branches: list[str] | None = None   # review only pull requests into these; the repo's review.md wins
 
     @field_validator("name")
     @classmethod
@@ -78,6 +79,8 @@ class ReviewSettings(_Strict):
     skip_label: str = "engineering-desk-skip"
     skip_drafts: bool = True
     skip_bots: bool = True
+    review_bots: list[str] = []     # bot logins reviewed even with skip_bots, such as the Software Factory's App
+    base_branches: list[str] | None = None   # the default for every repo; None or [] means every branch
     wait_for_profile_minutes: int = Field(10, ge=0, le=120)  # a new repo's first reviews wait for its profile
     status_check: StatusCheck = "report"
     model: str | None = None
@@ -258,6 +261,11 @@ class Settings(_Strict):
 
     def status_for(self, name: str) -> StatusCheck:
         return self.repo(name).status_check or self.review.status_check
+
+    def base_branches_for(self, name: str) -> list[str] | None:
+        """The repo setting, else the hub default. None: not set here (every branch)."""
+        own = self.repo(name).base_branches if name in self.repo_names() else None
+        return own if own is not None else self.review.base_branches
 
     def exclude_for(self, name: str) -> list[str]:
         """The globs the security watch and deep audit skip in this repo."""

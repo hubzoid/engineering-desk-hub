@@ -585,7 +585,7 @@ def test_audit_that_cannot_run_is_reported(hub):
 
 def test_partly_reviewed_pull_requests_never_pass_the_gate():
     gz = h.template_lib()
-    assert gz.review.status_for("gate", [], 3) == ("failure", "Partly reviewed: 3 files not reviewed. No open findings")
+    assert gz.review.status_for("gate", [], 3) == ("error", "Partly reviewed: 3 files not reviewed. No open findings")
     assert gz.review.status_for("report", [], 3)[0] == "success"
     assert gz.review.status_for("gate", [], 0) == ("success", "No open findings")
 

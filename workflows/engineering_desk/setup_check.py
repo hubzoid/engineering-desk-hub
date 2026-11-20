@@ -27,7 +27,7 @@ def check() -> dict:
             branch = gh.default_branch(repo)
             sha = gh.branch_sha(repo, branch)
             pulls = gh.open_pulls(repo)
-            controls = flow.controls(gh, store, repo, fresh=True)
+            controls = flow.controls(gh, store, repo, fresh=True, settings=settings)
             eligible = [p for p in pulls if not flow.gz.rules.skip_reason(p, settings.review, controls)]
             ci = gh.ci_status(repo, sha)
             # Read permissions are exercised. Write permissions are not tested by mutating a repo.

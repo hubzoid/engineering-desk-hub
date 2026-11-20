@@ -179,11 +179,22 @@ it its own name.
 
 **Merge gate (optional).** `review.status_check: gate` makes the
 `engineering-desk/review` status fail while a blocking finding (open, high, bug or
-security) is open. Make it a required check in branch protection, and keep a
+security) is open. A pull request reviewed only in part (files over the size
+budget) gets `error` instead: it still fails a required check, but there is
+nothing for the author to fix until a person looks. The status links to the
+summary comment, and the summary names the commit it describes. Make it a required check in branch protection, and keep a
 required human approval too: Engineering Desk's green status is not an approval. With
 the gate on, a pull request's own author cannot dismiss or defer a blocking
 finding. The `engineering-desk-skip` label stops reviews on a pull request but keeps
 its last status, so a label cannot lift the gate.
+
+**With the Software Factory (optional).** When the Software Factory opens draft
+pull requests in the same repositories, it can fix the Desk's blocking findings on
+its own pull request, the way it fixes red CI. For those repositories set
+`status_check: gate`, `review.skip_drafts: false` (the factory opens drafts), and the
+factory's GitHub App bot in `review.review_bots`, which keeps other bots such as
+Dependabot skipped. The factory's side is in its SETUP.md, step 7. It needs no
+Engineering Desk key: it reads the failed status and this summary.
 
 ## 7. Bring your team
 
@@ -281,6 +292,8 @@ the defaults.
 |---|---|---|
 | `review.backlog` | `all`: every open pull request, five per sweep | `latest` (the newest `first_run_limit`), `new` (only new pull requests and pushes) |
 | `review.skip_drafts`, `review.skip_bots` | `true` | `false` reviews them |
+| `review.review_bots` | `[]` | Bot logins reviewed even with `skip_bots`, such as the Software Factory's App |
+| `review.base_branches` | none: every branch | Review only pull requests into these branches. Per repo too (`repos[].base_branches`). A repository's `.engineering-desk/review.md` `base_branches` wins, and `[]` there means every branch |
 | `review.status_check` | `report`: information only | `gate` (see step 6), `off` |
 | `review.severity_floor` | `high` | `medium`, `low`. Per repo too |
 | `review.max_age_days` | `0`: no cutoff | Older pull requests wait for a push or a manual review |

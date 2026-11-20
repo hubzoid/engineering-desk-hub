@@ -616,3 +616,33 @@ def test_digest_email_matches_subject_and_shows_security_state():
              "audit_in_progress": ["a/b"]}
     _, body = gz.mail.digest_email("all", "x", "y", d, numbers, clean, implicit=True)
     assert "Engineering Desk Digest</h1>" in body and "No open security issues" in body and "still in progress" in body
+
+
+def test_base_branches_from_settings_with_the_repo_file_winning():
+    s = gz.settings.load({"source": "github", "review": {"base_branches": ["main"]},
+                          "repos": [{"name": "a/api", "base_branches": ["dev", "main"]}, {"name": "a/web"}]})
+    assert s.base_branches_for("a/api") == ["dev", "main"] and s.base_branches_for("a/web") == ["main"]
+    unset = gz.rules.parse_review_md("---\nskip_title: [WIP]\n---\n")
+    assert unset["base_branches"] is None
+    assert gz.rules.with_settings(unset, s, "a/api")["base_branches"] == ["dev", "main"]
+    every = gz.rules.parse_review_md("---\nbase_branches: []\n---\n")
+    assert gz.rules.with_settings(every, s, "a/api")["base_branches"] == []       # the file says every branch
+    own = gz.rules.parse_review_md("---\nbase_branches: [release]\n---\n")
+    assert gz.rules.with_settings(own, s, "a/api")["base_branches"] == ["release"]
+    plain = gz.settings.load({"source": "github", "repos": [{"name": "a/api"}]})
+    assert gz.rules.with_settings(unset, plain, "a/api")["base_branches"] == []   # nothing set: every branch
+
+
+def test_review_bots_are_reviewed_while_other_bots_are_skipped():
+    rc = gz.settings.load({"review": {"review_bots": ["Hubzoid-Factory[bot]"]}}).review
+    pr = {"author_type": "Bot", "draft": False, "labels": [], "title": "x", "base_ref": "main"}
+    assert gz.rules.skip_reason({**pr, "author": "hubzoid-factory[bot]"}, rc, {}) is None
+    assert "bot" in gz.rules.skip_reason({**pr, "author": "dependabot[bot]"}, rc, {})
+
+
+def test_failure_always_means_a_blocking_finding():
+    blocking = [{"severity": "high", "category": "bug", "state": "open"}]
+    assert gz.review.status_for("gate", blocking, 0)[0] == "failure"
+    assert gz.review.status_for("gate", blocking, 2)[0] == "failure"
+    assert gz.review.status_for("gate", [], 2)[0] == "error"
+    assert gz.review.with_head("body", "a" * 40).endswith("<!-- engineering-desk:head:" + "a" * 40 + " -->")

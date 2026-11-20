@@ -118,7 +118,7 @@ def newest_pulls(repo: str) -> dict:
     if gz.settings.publishing(settings) != "preview":
         return {"numbers": [], "note": "Pull request previews are skipped while reviews are published live, so a "
                                        "first check never posts on GitHub."}
-    controls = flow.controls(gh, store, repo)
+    controls = flow.controls(gh, store, repo, settings=settings)
     pulls = [p for p in gh.open_pulls(repo) if not gz.rules.skip_reason(p, settings.review, controls)]
     pulls.sort(key=lambda p: p.get("created_at") or "", reverse=True)
     return {"numbers": [p["number"] for p in pulls[:PREVIEWS]], "note": "" if pulls else "No open pull request to preview."}
